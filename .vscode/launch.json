@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Chrome",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "chrome"]
+    },
+    {
+      "name": "Web Server :8080",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "web-server", "--web-port", "8080"]
+    },
+    {
+      "name": "Web Server :8080 (profile)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "web-server", "--web-port", "8080", "--profile"]
+    },
+    {
+      "name": "Android Device",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "android"]
+    },
+    {
+      "name": "Android (profile)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "android", "--profile"]
+    }
+  ]
+}
