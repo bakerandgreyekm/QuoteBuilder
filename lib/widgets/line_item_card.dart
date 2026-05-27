@@ -12,7 +12,7 @@ class LineItemCard extends StatelessWidget {
   final double rate;
   final String noteText;
   final VoidCallback? onTap;
-  final VoidCallback? onDismissed;
+  final Future<bool> Function()? onConfirmDismiss;
 
   const LineItemCard({
     super.key,
@@ -24,7 +24,7 @@ class LineItemCard extends StatelessWidget {
     required this.rate,
     this.noteText = '',
     this.onTap,
-    this.onDismissed,
+    this.onConfirmDismiss,
   });
 
   @override
@@ -37,8 +37,7 @@ class LineItemCard extends StatelessWidget {
     return Dismissible(
       key: Key(itemId),
       direction: DismissDirection.endToStart,
-      confirmDismiss: (_) async => onDismissed != null,
-      onDismissed: (_) => onDismissed?.call(),
+      confirmDismiss: (_) => onConfirmDismiss?.call() ?? Future.value(false),
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),

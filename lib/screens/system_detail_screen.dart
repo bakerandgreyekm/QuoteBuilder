@@ -9,7 +9,7 @@ import '../widgets/running_total_bar.dart';
 import '../widgets/line_item_card.dart';
 import '../providers/line_items_provider.dart';
 
-class SystemDetailScreen extends ConsumerWidget {
+class SystemDetailScreen extends ConsumerStatefulWidget {
   final String projectId;
   final String systemType;
 
@@ -19,7 +19,36 @@ class SystemDetailScreen extends ConsumerWidget {
     required this.systemType,
   });
 
-  void _showItemOptions(BuildContext context, WidgetRef ref, LineItem item) {
+  @override
+  ConsumerState<SystemDetailScreen> createState() => _SystemDetailScreenState();
+}
+
+class _SystemDetailScreenState extends ConsumerState<SystemDetailScreen> {
+  bool _deleting = false;
+
+  Future<bool> _deleteItem(LineItem item) async {
+    setState(() => _deleting = true);
+    try {
+      await ref
+          .read(lineItemsProvider.notifier)
+          .deleteItem(item.projectId, item.id);
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Delete failed: $e', style: GoogleFonts.inter()),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  void _showItemOptions(BuildContext context, LineItem item) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -61,7 +90,7 @@ class SystemDetailScreen extends ConsumerWidget {
                 Text('Delete', style: GoogleFonts.inter(color: Colors.red)),
             onTap: () {
               Navigator.pop(ctx);
-              _deleteWithUndo(context, ref, item);
+              _deleteItem(item);
             },
           ),
           const SizedBox(height: 8),
@@ -70,27 +99,13 @@ class SystemDetailScreen extends ConsumerWidget {
     );
   }
 
-  void _deleteWithUndo(BuildContext context, WidgetRef ref, LineItem item) {
-    ref.read(lineItemsProvider.notifier).deleteItem(item.projectId, item.id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Item removed', style: GoogleFonts.inter()),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () =>
-              ref.read(lineItemsProvider.notifier).addItem(item),
-        ),
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final items = ref.watch(lineItemsProvider).maybeWhen(
           data: (all) => all
               .where((i) =>
-                  i.projectId == projectId && i.systemType == systemType)
+                  i.projectId == widget.projectId &&
+                  i.systemType == widget.systemType)
               .toList(),
           orElse: () => <LineItem>[],
         );
@@ -106,7 +121,7 @@ class SystemDetailScreen extends ConsumerWidget {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          systemType,
+          widget.systemType,
           style: GoogleFonts.inter(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -130,41 +145,65 @@ class SystemDetailScreen extends ConsumerWidget {
         ],
       ),
       bottomNavigationBar: RunningTotalBar(totalExGST: subtotal),
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary))
-          : items.isEmpty
-              ? Center(
-                  child: Text(
-                    'No items yet.\nTap "Add Item" to get started.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: AppColors.textSecondaryOnDark,
+      body: Stack(
+        children: [
+          isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary))
+              : items.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No items yet.\nTap "Add Item" to get started.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: AppColors.textSecondaryOnDark,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(top: 8, bottom: 80),
+                      itemCount: items.length,
+                      itemBuilder: (_, i) {
+                        final item = items[i];
+                        return LineItemCard(
+                          itemId: item.id,
+                          productName: item.productName,
+                          brand: item.brand,
+                          quantity: item.quantity,
+                          unit: item.unit,
+                          rate: item.rate,
+                          noteText: item.noteText,
+                          onTap: () => _showItemOptions(context, item),
+                          onConfirmDismiss: () => _deleteItem(item),
+                        );
+                      },
                     ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.only(top: 8, bottom: 80),
-                  itemCount: items.length,
-                  itemBuilder: (_, i) {
-                    final item = items[i];
-                    return LineItemCard(
-                      itemId: item.id,
-                      productName: item.productName,
-                      brand: item.brand,
-                      quantity: item.quantity,
-                      unit: item.unit,
-                      rate: item.rate,
-                      noteText: item.noteText,
-                      onTap: () => _showItemOptions(context, ref, item),
-                      onDismissed: () => _deleteWithUndo(context, ref, item),
-                    );
-                  },
+          if (_deleting)
+            Container(
+              color: Colors.black.withValues(alpha: 0.6),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: AppColors.primary),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Deleting item...',
+                      style: GoogleFonts.inter(
+                          color: Colors.white, fontSize: 14),
+                    ),
+                  ],
                 ),
+              ),
+            ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context
-            .push('/project/$projectId/system/$systemType/add-item'),
+        onPressed: _deleting
+            ? null
+            : () => context.push(
+                '/project/${widget.projectId}/system/${widget.systemType}/add-item'),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
         label: Text(

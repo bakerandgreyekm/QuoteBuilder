@@ -17,7 +17,6 @@ class LineItemsNotifier extends AsyncNotifier<List<LineItem>> {
         .toList();
     final current = state.value ?? [];
     final fetchedIds = fetched.map((i) => i.id).toSet();
-    // Keep locally added items not yet reflected in the fetch (added while in-flight)
     final localExtra = current
         .where((i) =>
             i.projectId == refNumber &&
