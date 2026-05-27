@@ -1,0 +1,273 @@
+// After pasting this code into script.google.com:
+// 1. Click Deploy > New Deployment
+// 2. Type: Web App
+// 3. Execute as: Me
+// 4. Who has access: Anyone
+// 5. Click Deploy and copy the Web App URL
+// 6. Paste the URL into lib/services/sheets_service.dart as _baseUrl
+
+const PROJECT_WORKBOOK_ID = '1zZQOmWe02oF7awuRkqgsMsJU1GwgcINyaXBNfUADkS4';
+const REFERENCE_WORKBOOK_ID = '1tdLzOTnnXIVVKrgEgQtS5YVnsZT3Sepo1E4LcKuRR6Y';
+const API_KEY = 'BG_QUOTE_2026';
+const PROJECTS_SHEET_NAME = 'Projects';
+const SYSTEM_TYPES_SHEET_NAME = 'SystemTypes';
+const CATALOGUE_SHEET_NAME = 'Catalogue';
+
+function checkAuth(e) {
+  return e.parameter['key'] === API_KEY;
+}
+
+function sendJSON(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function sheetToJSON(sheet) {
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  const headers = data[0];
+  const rows = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (row.every(cell => cell === '' || cell === null || cell === undefined)) continue;
+    const obj = {};
+    headers.forEach((header, j) => { obj[header] = row[j]; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function generateRefNumber(projectsSheet) {
+  const data = projectsSheet.getDataRange().getValues();
+  if (data.length < 2) return 'BG-QT-1000';
+  const refNumbers = data.slice(1).map(row => row[0]).filter(r => /^BG-QT-\d+$/.test(String(r)));
+  if (refNumbers.length === 0) return 'BG-QT-1000';
+  const highest = Math.max(...refNumbers.map(r => parseInt(String(r).replace('BG-QT-', ''))));
+  return 'BG-QT-' + (highest + 1);
+}
+
+function generateId() {
+  return Utilities.getUuid();
+}
+
+function doGet(e) {
+  if (!checkAuth(e)) {
+    return sendJSON({ success: false, error: 'Unauthorized' });
+  }
+  const action = e.parameter.action;
+
+  if (action === 'getProjects') {
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(PROJECTS_SHEET_NAME);
+      if (!sheet) return sendJSON({ success: false, error: 'Projects sheet not found' });
+      return sendJSON({ success: true, data: sheetToJSON(sheet) });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'getSystemTypes') {
+    try {
+      const wb = SpreadsheetApp.openById(REFERENCE_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(SYSTEM_TYPES_SHEET_NAME);
+      if (!sheet) return sendJSON({ success: false, error: 'SystemTypes sheet not found' });
+      return sendJSON({ success: true, data: sheetToJSON(sheet) });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'getCatalogue') {
+    try {
+      const wb = SpreadsheetApp.openById(REFERENCE_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(CATALOGUE_SHEET_NAME);
+      if (!sheet) return sendJSON({ success: false, error: 'Catalogue sheet not found' });
+      const rows = sheetToJSON(sheet).map(r => ({ ...r, Rate: parseFloat(r['Rate']) || 0 }));
+      return sendJSON({ success: true, data: rows });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'getLineItems') {
+    const refNumber = e.parameter.refNumber;
+    if (!refNumber) return sendJSON({ success: false, error: 'refNumber required' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(refNumber);
+      if (!sheet) return sendJSON({ success: false, error: 'Project sheet not found' });
+      const rows = sheetToJSON(sheet)
+        .filter(r => !String(r['ID'] || '').startsWith('SYSTEM_PLACEHOLDER_'));
+      const parsed = rows.map(r => ({
+        'ID': String(r['ID'] || ''),
+        'System Type': String(r['System Type'] || ''),
+        'Category': String(r['Category'] || ''),
+        'Product Name': String(r['Product Name'] || ''),
+        'Brand': String(r['Brand'] || ''),
+        'Unit': String(r['Unit'] || ''),
+        'Quantity': parseFloat(r['Quantity']) || 0,
+        'Rate': parseFloat(r['Rate']) || 0,
+        'Amount': parseFloat(r['Amount']) || 0,
+        'Note': String(r['Note'] || ''),
+        'Created At': String(r['Created At'] || ''),
+      }));
+      return sendJSON({ success: true, data: parsed });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'getSystems') {
+    const refNumber = e.parameter.refNumber;
+    if (!refNumber) return sendJSON({ success: false, error: 'refNumber required' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(refNumber);
+      if (!sheet) return sendJSON({ success: true, data: [] });
+      const rows = sheetToJSON(sheet);
+      const seen = new Set();
+      const systemTypes = [];
+      rows.forEach(r => {
+        const t = String(r['System Type'] || '');
+        if (t && !seen.has(t)) { seen.add(t); systemTypes.push({ 'System Type': t }); }
+      });
+      return sendJSON({ success: true, data: systemTypes });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'getEmployees') {
+    try {
+      const wb = SpreadsheetApp.openById(REFERENCE_WORKBOOK_ID);
+      const sheet = wb.getSheetByName('Employees');
+      if (!sheet) return sendJSON({ success: false, error: 'Employees sheet not found' });
+      const values = sheet.getDataRange().getValues().slice(1);
+      const names = values.map(r => String(r[0]).trim()).filter(n => n !== '');
+      return sendJSON({ success: true, data: names.map(n => ({ Names: n })) });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  return sendJSON({ success: false, error: 'Unknown action' });
+}
+
+function doPost(e) {
+  let body;
+  try { body = JSON.parse(e.postData.contents); }
+  catch (err) { return sendJSON({ success: false, error: 'Invalid JSON body' }); }
+
+  if (body.key !== API_KEY) {
+    return sendJSON({ success: false, error: 'Unauthorized' });
+  }
+  const action = body.action;
+
+  if (action === 'createProject') {
+    const { projectName, clientName, location, worker } = body;
+    if (!projectName) return sendJSON({ success: false, error: 'projectName required' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      let projectsSheet = wb.getSheetByName(PROJECTS_SHEET_NAME);
+      if (!projectsSheet) {
+        projectsSheet = wb.insertSheet(PROJECTS_SHEET_NAME);
+        projectsSheet.appendRow(['Ref. Number', 'Project Name', 'Client Name', 'Location', 'Created At', 'Worker']);
+      }
+      const refNumber = generateRefNumber(projectsSheet);
+      projectsSheet.appendRow([refNumber, projectName, clientName || '', location || '', new Date().toISOString(), worker || '']);
+      const newSheet = wb.insertSheet(refNumber);
+      newSheet.appendRow(['ID', 'System Type', 'Category', 'Product Name', 'Brand', 'Unit', 'Quantity', 'Rate', 'Amount', 'Note', 'Created At', 'Worker']);
+      return sendJSON({ success: true, refNumber: refNumber });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'addLineItem') {
+    const refNumber = body.refNumber;
+    if (!refNumber) return sendJSON({ success: false, error: 'refNumber required' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(refNumber);
+      if (!sheet) return sendJSON({ success: false, error: 'Project sheet not found' });
+      const id = generateId();
+      const now = new Date().toISOString();
+      const amount = (parseFloat(body.quantity) || 0) * (parseFloat(body.rate) || 0);
+      sheet.appendRow([
+        id,
+        body.systemType || '',
+        body.category || '',
+        body.productName || '',
+        body.brand || '',
+        body.unit || '',
+        parseFloat(body.quantity) || 0,
+        parseFloat(body.rate) || 0,
+        amount,
+        body.noteText || '',
+        now,
+        body.worker || '',
+      ]);
+      return sendJSON({ success: true, id: id });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'deleteLineItem') {
+    const { refNumber, itemId } = body;
+    if (!refNumber || !itemId) return sendJSON({ success: false, error: 'Missing required fields' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(refNumber);
+      if (!sheet) return sendJSON({ success: false, error: 'Project sheet not found' });
+      const data = sheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === String(itemId)) {
+          sheet.deleteRow(i + 1);
+          return sendJSON({ success: true });
+        }
+      }
+      return sendJSON({ success: false, error: 'Item not found' });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'addSystem') {
+    const { refNumber, systemType } = body;
+    if (!refNumber || !systemType) return sendJSON({ success: false, error: 'Missing required fields' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(refNumber);
+      if (!sheet) return sendJSON({ success: false, error: 'Project sheet not found' });
+      const placeholderId = 'SYSTEM_PLACEHOLDER_' + generateId();
+      sheet.appendRow([placeholderId, systemType, '', '', '', '', '', '', '', '', new Date().toISOString(), '']);
+      return sendJSON({ success: true });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'removeSystem') {
+    const { refNumber, systemType } = body;
+    if (!refNumber || !systemType) return sendJSON({ success: false, error: 'Missing required fields' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(refNumber);
+      if (!sheet) return sendJSON({ success: false, error: 'Project sheet not found' });
+      const data = sheet.getDataRange().getValues();
+      let deletedCount = 0;
+      for (let i = data.length - 1; i >= 1; i--) {
+        if (String(data[i][1]) === systemType) {
+          sheet.deleteRow(i + 1);
+          deletedCount++;
+        }
+      }
+      return sendJSON({ success: true, deletedCount: deletedCount });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'deleteProject') {
+    const { refNumber } = body;
+    if (!refNumber) return sendJSON({ success: false, error: 'refNumber required' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const projectSheet = wb.getSheetByName(refNumber);
+      if (projectSheet) wb.deleteSheet(projectSheet);
+      const projectsIndex = wb.getSheetByName(PROJECTS_SHEET_NAME);
+      if (projectsIndex) {
+        const data = projectsIndex.getDataRange().getValues();
+        for (let i = data.length - 1; i >= 1; i--) {
+          if (String(data[i][0]) === refNumber) {
+            projectsIndex.deleteRow(i + 1);
+            break;
+          }
+        }
+      }
+      return sendJSON({ success: true });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  return sendJSON({ success: false, error: 'Unknown action' });
+}

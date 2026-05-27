@@ -113,6 +113,7 @@ class SheetsService {
     required int quantity,
     required double rate,
     required String noteText,
+    required String worker,
   }) async {
     final result = await _post({
       'action': 'addLineItem',
@@ -125,6 +126,7 @@ class SheetsService {
       'quantity': quantity,
       'rate': rate,
       'noteText': noteText,
+      'worker': worker,
     });
     return result['id'] as String;
   }

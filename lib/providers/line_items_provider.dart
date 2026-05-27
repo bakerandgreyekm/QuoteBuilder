@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/line_item.dart';
 import 'sheets_service_provider.dart';
+import 'worker_provider.dart';
 
 class LineItemsNotifier extends AsyncNotifier<List<LineItem>> {
   @override
@@ -28,6 +29,7 @@ class LineItemsNotifier extends AsyncNotifier<List<LineItem>> {
   }
 
   Future<void> addItem(LineItem item) async {
+    final worker = ref.read(workerNameProvider);
     final id = await ref.read(sheetsServiceProvider).addLineItem(
           refNumber: item.projectId,
           systemType: item.systemType,
@@ -38,6 +40,7 @@ class LineItemsNotifier extends AsyncNotifier<List<LineItem>> {
           quantity: item.quantity,
           rate: item.rate,
           noteText: item.noteText,
+          worker: worker,
         );
     final itemWithId = item.copyWith(id: id);
     final existing = state.value ?? [];
