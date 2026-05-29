@@ -83,7 +83,7 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
   Widget build(BuildContext context) {
     final catalogueAsync = ref.watch(catalogueProvider);
     final catalogueLoading = catalogueAsync.isLoading;
-    final categories = ref.watch(categoriesProvider);
+    final categories = ref.watch(categoriesForSystemProvider(widget.systemType));
     final products = _category != null
         ? ref.watch(productsByCategoryProvider(_category!))
         : <Product>[];

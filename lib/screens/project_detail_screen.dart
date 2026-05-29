@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../utils.dart';
 import '../utils/system_icons.dart';
 import '../widgets/running_total_bar.dart';
+import '../models/project.dart';
 import '../providers/projects_provider.dart';
 import '../providers/systems_provider.dart';
 import '../providers/line_items_provider.dart';
@@ -71,6 +72,28 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         );
       }
     }
+  }
+
+  void _showEditSheet(BuildContext context, Project project) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _EditProjectSheet(
+        project: project,
+        onSave: (name, client, location) async {
+          await ref.read(projectsProvider.notifier).updateProject(
+                refNumber: project.refNumber,
+                name: name,
+                clientName: client,
+                location: location,
+              );
+        },
+      ),
+    );
   }
 
   void _showAddSystemSheet(BuildContext context) {
@@ -157,11 +180,23 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.white),
                 onSelected: (value) {
-                  if (value == 'delete') {
+                  if (value == 'edit') {
+                    _showEditSheet(context, project);
+                  } else if (value == 'delete') {
                     _confirmDelete(project.id, project.name);
                   }
                 },
                 itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.edit_outlined, size: 20),
+                        const SizedBox(width: 8),
+                        Text('Edit Project', style: GoogleFonts.inter()),
+                      ],
+                    ),
+                  ),
                   PopupMenuItem(
                     value: 'delete',
                     child: Row(
@@ -328,6 +363,164 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+  }
+}
+
+class _EditProjectSheet extends StatefulWidget {
+  final Project project;
+  final Future<void> Function(String name, String client, String location) onSave;
+
+  const _EditProjectSheet({required this.project, required this.onSave});
+
+  @override
+  State<_EditProjectSheet> createState() => _EditProjectSheetState();
+}
+
+class _EditProjectSheetState extends State<_EditProjectSheet> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _clientCtrl;
+  late final TextEditingController _locationCtrl;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.project.name);
+    _clientCtrl = TextEditingController(text: widget.project.clientName);
+    _locationCtrl = TextEditingController(text: widget.project.location);
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _clientCtrl.dispose();
+    _locationCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(name, _clientCtrl.text.trim(), _locationCtrl.text.trim());
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e', style: GoogleFonts.inter())),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Edit Project',
+              style: GoogleFonts.inter(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textOnCard,
+              ),
+            ),
+            const SizedBox(height: 20),
+            _EditField(hint: 'Project Name', icon: Icons.business, controller: _nameCtrl),
+            const SizedBox(height: 12),
+            _EditField(hint: 'Client Name', icon: Icons.person, controller: _clientCtrl),
+            const SizedBox(height: 12),
+            _EditField(hint: 'Location', icon: Icons.location_on, controller: _locationCtrl),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  disabledBackgroundColor: Colors.grey[300],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2),
+                      )
+                    : Text(
+                        'Save Changes',
+                        style: GoogleFonts.inter(
+                            fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EditField extends StatelessWidget {
+  final String hint;
+  final IconData icon;
+  final TextEditingController controller;
+
+  const _EditField({
+    required this.hint,
+    required this.icon,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      style: GoogleFonts.inter(color: AppColors.textOnCard),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.inter(color: AppColors.textSecondaryOnCard),
+        prefixIcon: Icon(icon, color: AppColors.textSecondaryOnCard),
+        filled: true,
+        fillColor: const Color(0xFFF9FAFB),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.divider),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.divider),
+        ),
+      ),
+    );
   }
 }
 

@@ -248,6 +248,26 @@ function doPost(e) {
     } catch (err) { return sendJSON({ success: false, error: err.message }); }
   }
 
+  if (action === 'updateProject') {
+    const { refNumber, projectName, clientName, location } = body;
+    if (!refNumber) return sendJSON({ success: false, error: 'refNumber required' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(PROJECTS_SHEET_NAME);
+      if (!sheet) return sendJSON({ success: false, error: 'Projects sheet not found' });
+      const data = sheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === refNumber) {
+          if (projectName !== undefined) sheet.getRange(i + 1, 2).setValue(projectName);
+          if (clientName !== undefined) sheet.getRange(i + 1, 3).setValue(clientName);
+          if (location !== undefined) sheet.getRange(i + 1, 4).setValue(location);
+          return sendJSON({ success: true });
+        }
+      }
+      return sendJSON({ success: false, error: 'Project not found' });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
   if (action === 'deleteProject') {
     const { refNumber } = body;
     if (!refNumber) return sendJSON({ success: false, error: 'refNumber required' });

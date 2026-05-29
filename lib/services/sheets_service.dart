@@ -63,6 +63,21 @@ class SheetsService {
         .toList();
   }
 
+  Future<Map<String, List<String>>> getSystemTypeTags() async {
+    final rows = await _get('getSystemTypes');
+    final result = <String, List<String>>{};
+    for (final r in rows) {
+      final systemType = r['System Type']?.toString() ?? '';
+      final tags = r['Tags']?.toString() ?? '';
+      if (systemType.isNotEmpty) {
+        result[systemType] = tags.isEmpty
+            ? []
+            : tags.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+      }
+    }
+    return result;
+  }
+
   Future<List<String>> getEmployees() async {
     final rows = await _get('getEmployees');
     return rows
@@ -161,6 +176,21 @@ class SheetsService {
       'action': 'removeSystem',
       'refNumber': refNumber,
       'systemType': systemType,
+    });
+  }
+
+  Future<void> updateProject({
+    required String refNumber,
+    required String projectName,
+    required String clientName,
+    required String location,
+  }) async {
+    await _post({
+      'action': 'updateProject',
+      'refNumber': refNumber,
+      'projectName': projectName,
+      'clientName': clientName,
+      'location': location,
     });
   }
 

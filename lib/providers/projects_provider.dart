@@ -29,6 +29,26 @@ class ProjectsNotifier extends AsyncNotifier<List<Project>> {
     return refNumber;
   }
 
+  Future<void> updateProject({
+    required String refNumber,
+    required String name,
+    required String clientName,
+    required String location,
+  }) async {
+    await ref.read(sheetsServiceProvider).updateProject(
+          refNumber: refNumber,
+          projectName: name,
+          clientName: clientName,
+          location: location,
+        );
+    final current = state.value ?? [];
+    state = AsyncData(current
+        .map((p) => p.id == refNumber
+            ? p.copyWith(name: name, clientName: clientName, location: location)
+            : p)
+        .toList());
+  }
+
   Future<void> deleteProject(String refNumber) async {
     await ref.read(sheetsServiceProvider).deleteProject(refNumber: refNumber);
     final current = state.value ?? [];
