@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import '../utils/speech_recognition.dart';
 
 class VoiceNoteButton extends StatefulWidget {
   final String currentLanguage;
   final ValueChanged<String> onLanguageToggle;
+  final ValueChanged<String> onTranscript;
 
   const VoiceNoteButton({
     super.key,
     required this.currentLanguage,
     required this.onLanguageToggle,
+    required this.onTranscript,
   });
 
   @override
@@ -20,6 +23,10 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
   bool _isRecording = false;
   late AnimationController _animController;
   late Animation<double> _pulseAnim;
+  final _helper = SpeechRecognitionHelper();
+
+  String get _langCode =>
+      widget.currentLanguage == 'ML' ? 'ml-IN' : 'en-IN';
 
   @override
   void initState() {
@@ -36,21 +43,31 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
   @override
   void dispose() {
     _animController.dispose();
+    if (_isRecording) _helper.stop();
     super.dispose();
   }
 
+  void _onEnd() {
+    if (!mounted || !_isRecording) return;
+    setState(() => _isRecording = false);
+    _animController.stop();
+    _animController.reset();
+  }
+
   void _toggle() {
-    setState(() => _isRecording = !_isRecording);
     if (_isRecording) {
-      _animController.repeat(reverse: true);
+      _helper.stop();
+      _onEnd();
     } else {
-      _animController.stop();
-      _animController.reset();
+      setState(() => _isRecording = true);
+      _animController.repeat(reverse: true);
+      _helper.start(_langCode, widget.onTranscript, _onEnd);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final supported = speechRecognitionSupported;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -70,7 +87,7 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
           ],
         ),
         GestureDetector(
-          onTap: _toggle,
+          onTap: supported ? _toggle : null,
           child: SizedBox(
             width: 60,
             height: 60,
@@ -92,11 +109,15 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
                 Container(
                   width: 44,
                   height: 44,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.primary,
+                    color: supported ? AppColors.primary : Colors.grey[300],
                   ),
-                  child: const Icon(Icons.mic, color: Colors.white, size: 22),
+                  child: Icon(
+                    Icons.mic,
+                    color: supported ? Colors.white : Colors.grey,
+                    size: 22,
+                  ),
                 ),
               ],
             ),

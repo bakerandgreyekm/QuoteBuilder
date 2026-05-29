@@ -41,6 +41,28 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <script>window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;</script>
+  <script>
+    window._qbShare = async function(bytes, filename, mimeType, title) {
+      const blob = new Blob([bytes], { type: mimeType });
+      const file = new File([blob], filename, { type: mimeType });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ title: title, files: [file] });
+          return;
+        } catch (e) {
+          if (e.name === 'AbortError') return;
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    };
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

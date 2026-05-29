@@ -244,6 +244,16 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
                         VoiceNoteButton(
                           currentLanguage: _lang,
                           onLanguageToggle: (l) => setState(() => _lang = l),
+                          onTranscript: (t) {
+                            final appended = _noteCtrl.text.isEmpty
+                                ? t
+                                : '${_noteCtrl.text} $t';
+                            _noteCtrl.value = _noteCtrl.value.copyWith(
+                              text: appended,
+                              selection: TextSelection.collapsed(
+                                  offset: appended.length),
+                            );
+                          },
                         ),
                         const SizedBox(height: 12),
                         TextField(
