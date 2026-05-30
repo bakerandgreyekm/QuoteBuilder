@@ -8,6 +8,8 @@ class Product {
   final String brand;
   final String unit;
   final double rate;
+  /// '' = all tiers, 'Value' = value only, 'Premium' = premium only
+  final String tier;
 
   const Product({
     required this.id,
@@ -16,6 +18,7 @@ class Product {
     required this.brand,
     required this.unit,
     required this.rate,
+    this.tier = '',
   });
 
   factory Product.fromMap(Map<String, dynamic> m) {
@@ -27,6 +30,7 @@ class Product {
       unit: m['Unit']?.toString() ?? '',
       rate: (m['Rate'] as num?)?.toDouble() ??
           double.tryParse(m['Rate']?.toString() ?? '0') ?? 0.0,
+      tier: m['Tier']?.toString().trim() ?? '',
     );
   }
 
@@ -37,6 +41,7 @@ class Product {
     String? brand,
     String? unit,
     double? rate,
+    String? tier,
   }) {
     return Product(
       id: id ?? this.id,
@@ -45,6 +50,7 @@ class Product {
       brand: brand ?? this.brand,
       unit: unit ?? this.unit,
       rate: rate ?? this.rate,
+      tier: tier ?? this.tier,
     );
   }
 

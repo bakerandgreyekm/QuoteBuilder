@@ -78,6 +78,21 @@ class SheetsService {
     return result;
   }
 
+  Future<Map<String, List<String>>> getSystemTypeIndustries() async {
+    final rows = await _get('getSystemTypes');
+    final result = <String, List<String>>{};
+    for (final r in rows) {
+      final systemType = r['System Type']?.toString() ?? '';
+      final industries = r['Industry']?.toString() ?? '';
+      if (systemType.isNotEmpty) {
+        result[systemType] = industries.isEmpty
+            ? []
+            : industries.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+      }
+    }
+    return result;
+  }
+
   Future<List<String>> getEmployees() async {
     final rows = await _get('getEmployees');
     return rows
@@ -107,6 +122,8 @@ class SheetsService {
     required String clientName,
     required String location,
     required String worker,
+    String? industry,
+    String? tier,
   }) async {
     final result = await _post({
       'action': 'createProject',
@@ -114,6 +131,8 @@ class SheetsService {
       'clientName': clientName,
       'location': location,
       'worker': worker,
+      'industry': industry ?? '',
+      'tier': tier ?? '',
     });
     return result['refNumber'] as String;
   }
@@ -184,6 +203,8 @@ class SheetsService {
     required String projectName,
     required String clientName,
     required String location,
+    String? industry,
+    String? tier,
   }) async {
     await _post({
       'action': 'updateProject',
@@ -191,6 +212,8 @@ class SheetsService {
       'projectName': projectName,
       'clientName': clientName,
       'location': location,
+      'industry': industry ?? '',
+      'tier': tier ?? '',
     });
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../utils/speech_recognition.dart';
@@ -6,12 +8,14 @@ class VoiceNoteButton extends StatefulWidget {
   final String currentLanguage;
   final ValueChanged<String> onLanguageToggle;
   final ValueChanged<String> onTranscript;
+  final ValueChanged<bool>? onRecordingChanged;
 
   const VoiceNoteButton({
     super.key,
     required this.currentLanguage,
     required this.onLanguageToggle,
     required this.onTranscript,
+    this.onRecordingChanged,
   });
 
   @override
@@ -50,6 +54,7 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
   void _onEnd() {
     if (!mounted || !_isRecording) return;
     setState(() => _isRecording = false);
+    widget.onRecordingChanged?.call(false);
     _animController.stop();
     _animController.reset();
   }
@@ -60,6 +65,7 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
       _onEnd();
     } else {
       setState(() => _isRecording = true);
+      widget.onRecordingChanged?.call(true);
       _animController.repeat(reverse: true);
       _helper.start(_langCode, widget.onTranscript, _onEnd);
     }
@@ -69,7 +75,6 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
   Widget build(BuildContext context) {
     final supported = speechRecognitionSupported;
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Row(
           children: [
@@ -86,6 +91,7 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
             ),
           ],
         ),
+        const Spacer(),
         GestureDetector(
           onTap: supported ? _toggle : null,
           child: SizedBox(
@@ -114,7 +120,7 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
                     color: supported ? AppColors.primary : Colors.grey[300],
                   ),
                   child: Icon(
-                    Icons.mic,
+                    _isRecording ? Icons.pause : Icons.mic,
                     color: supported ? Colors.white : Colors.grey,
                     size: 22,
                   ),
@@ -123,10 +129,72 @@ class _VoiceNoteButtonState extends State<VoiceNoteButton>
             ),
           ),
         ),
+        // Visualizer — remove AnimatedSize block below to revert
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          child: _isRecording
+              ? const SizedBox(width: 80, height: 60,
+                  child: Center(child: _VisualizerBars()))
+              : const SizedBox.shrink(),
+        ),
       ],
     );
   }
 }
+
+// --- Visualizer (remove this class and its usage in build() to revert) ---
+class _VisualizerBars extends StatefulWidget {
+  const _VisualizerBars();
+
+  @override
+  State<_VisualizerBars> createState() => _VisualizerBarsState();
+}
+
+class _VisualizerBarsState extends State<_VisualizerBars> {
+  static const _count = 5;
+  final _rng = Random();
+  late Timer _timer;
+  List<double> _heights = List.generate(_count, (_) => 6.0);
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 180), (_) {
+      if (mounted) {
+        setState(() {
+          _heights = List.generate(_count, (_) => 4 + _rng.nextDouble() * 26);
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: List.generate(_count, (i) => AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeInOut,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        width: 4,
+        height: _heights[i],
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      )),
+    );
+  }
+}
+// --- End Visualizer ---
 
 class _LangChip extends StatelessWidget {
   final String label;

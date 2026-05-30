@@ -5,6 +5,8 @@ import '../theme.dart';
 import '../utils/system_icons.dart';
 import '../providers/systems_provider.dart';
 import '../providers/system_types_provider.dart';
+import '../providers/catalogue_provider.dart';
+import '../providers/projects_provider.dart';
 
 class AddSystemSheet extends ConsumerStatefulWidget {
   final String projectId;
@@ -21,6 +23,17 @@ class _AddSystemSheetState extends ConsumerState<AddSystemSheet> {
   @override
   Widget build(BuildContext context) {
     final systemTypesAsync = ref.watch(systemTypesProvider);
+    final industryMap = ref.watch(systemIndustriesProvider).value ?? {};
+    final projectIndustry = ref.watch(projectsProvider).maybeWhen(
+          data: (projects) {
+            try {
+              return projects.firstWhere((p) => p.id == widget.projectId).industry;
+            } catch (_) {
+              return null;
+            }
+          },
+          orElse: () => null,
+        );
     final addedSystems = ref.watch(systemsProvider).maybeWhen(
           data: (systems) => systems
               .where((s) => s.projectId == widget.projectId)
@@ -125,31 +138,45 @@ class _AddSystemSheetState extends ConsumerState<AddSystemSheet> {
                       .where((s) =>
                           s.toLowerCase().contains(_query.toLowerCase()))
                       .toList();
-                  return ListView.builder(
+
+                  // flat list when no industry set on project
+                  if (projectIndustry == null) {
+                    return ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) => _buildTile(
+                          filtered[i], addedSystems.contains(filtered[i])),
+                    );
+                  }
+
+                  // sectioned list when industry is set
+                  final recommended = filtered
+                      .where((s) =>
+                          (industryMap[s] ?? []).contains(projectIndustry))
+                      .toList();
+                  final others = filtered
+                      .where((s) =>
+                          !(industryMap[s] ?? []).contains(projectIndustry))
+                      .toList();
+
+                  return ListView(
                     controller: scrollController,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 4),
-                    itemCount: filtered.length,
-                    itemBuilder: (_, i) {
-                      final systemType = filtered[i];
-                      final isAdded = addedSystems.contains(systemType);
-                      return _SystemTile(
-                        systemType: systemType,
-                        icon: iconForSystem(systemType),
-                        isAdded: isAdded,
-                        onTap: () {
-                          if (isAdded) {
-                            ref
-                                .read(systemsProvider.notifier)
-                                .removeSystem(widget.projectId, systemType);
-                          } else {
-                            ref
-                                .read(systemsProvider.notifier)
-                                .addSystem(widget.projectId, systemType);
-                          }
-                        },
-                      );
-                    },
+                    children: [
+                      if (recommended.isNotEmpty) ...[
+                        _SectionLabel('RECOMMENDED FOR $projectIndustry'.toUpperCase()),
+                        ...recommended.map((s) =>
+                            _buildTile(s, addedSystems.contains(s))),
+                      ],
+                      if (others.isNotEmpty) ...[
+                        _SectionLabel('ALL SYSTEMS'),
+                        ...others
+                            .map((s) => _buildTile(s, addedSystems.contains(s))),
+                      ],
+                    ],
                   );
                 },
               ),
@@ -180,6 +207,46 @@ class _AddSystemSheetState extends ConsumerState<AddSystemSheet> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTile(String systemType, bool isAdded) {
+    return _SystemTile(
+      systemType: systemType,
+      icon: iconForSystem(systemType),
+      isAdded: isAdded,
+      onTap: () {
+        if (isAdded) {
+          ref
+              .read(systemsProvider.notifier)
+              .removeSystem(widget.projectId, systemType);
+        } else {
+          ref
+              .read(systemsProvider.notifier)
+              .addSystem(widget.projectId, systemType);
+        }
+      },
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  const _SectionLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+      child: Text(
+        label,
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondaryOnCard,
+          letterSpacing: 1.2,
         ),
       ),
     );

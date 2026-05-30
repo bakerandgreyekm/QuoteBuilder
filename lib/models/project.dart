@@ -8,6 +8,9 @@ class Project {
   final String location;
   final DateTime createdAt;
   final String refNumber;
+  final String? industry;
+  /// null = no filter, 'Value' or 'Premium'
+  final String? tier;
 
   const Project({
     required this.id,
@@ -16,6 +19,8 @@ class Project {
     required this.location,
     required this.createdAt,
     required this.refNumber,
+    this.industry,
+    this.tier,
   });
 
   Project copyWith({
@@ -25,6 +30,8 @@ class Project {
     String? location,
     DateTime? createdAt,
     String? refNumber,
+    String? industry,
+    String? tier,
   }) {
     return Project(
       id: id ?? this.id,
@@ -33,11 +40,15 @@ class Project {
       location: location ?? this.location,
       createdAt: createdAt ?? this.createdAt,
       refNumber: refNumber ?? this.refNumber,
+      industry: industry ?? this.industry,
+      tier: tier ?? this.tier,
     );
   }
 
   factory Project.fromMap(Map<String, dynamic> m) {
     final refNumber = m['Ref. Number']?.toString() ?? '';
+    final industry = m['Industry']?.toString().trim();
+    final tier = m['Tier']?.toString().trim();
     return Project(
       id: refNumber,
       refNumber: refNumber,
@@ -47,6 +58,8 @@ class Project {
       createdAt: m['Created At'] != null
           ? DateTime.tryParse(m['Created At'].toString()) ?? DateTime.now()
           : DateTime.now(),
+      industry: (industry?.isEmpty ?? true) ? null : industry,
+      tier: (tier?.isEmpty ?? true) ? null : tier,
     );
   }
 

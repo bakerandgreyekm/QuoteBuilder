@@ -9,6 +9,8 @@ import '../providers/systems_provider.dart';
 import '../providers/line_items_provider.dart';
 import '../providers/worker_provider.dart';
 import '../providers/employees_provider.dart';
+import '../providers/catalogue_provider.dart';
+import '../widgets/loading_widgets.dart';
 
 class ProjectsListScreen extends ConsumerStatefulWidget {
   const ProjectsListScreen({super.key});
@@ -20,6 +22,7 @@ class ProjectsListScreen extends ConsumerStatefulWidget {
 class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
   String _query = '';
   bool _creatingProject = false;
+  bool _statsLoaded = false;
 
   @override
   void initState() {
@@ -28,14 +31,30 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
       if (ref.read(workerNameProvider) == 'Field Worker') {
         _showWorkerNameSheet();
       }
+      _loadStats();
+      // warm up so industries are ready before the New Project sheet opens
+      ref.read(systemIndustriesProvider.future).ignore();
     });
   }
 
-  void _showWorkerNameSheet() {
+  Future<void> _loadStats() async {
+    try {
+      final projects = await ref.read(projectsProvider.future);
+      await Future.wait(projects.map((p) async {
+        await Future.wait([
+          ref.read(systemsProvider.notifier).loadForProject(p.id),
+          ref.read(lineItemsProvider.notifier).loadForProject(p.id),
+        ]);
+      }));
+    } catch (_) {}
+    if (mounted) setState(() => _statsLoaded = true);
+  }
+
+  void _showWorkerNameSheet({bool dismissible = false}) {
     showModalBottomSheet(
       context: context,
-      isDismissible: false,
-      enableDrag: false,
+      isDismissible: dismissible,
+      enableDrag: dismissible,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
@@ -57,13 +76,15 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
     );
   }
 
-  void _createProject(String name, String client, String location) async {
+  void _createProject(String name, String client, String location,
+      String? industry, String? tier) async {
     setState(() => _creatingProject = true);
     try {
       final workerName = ref.read(workerNameProvider);
       final refNumber = await ref
           .read(projectsProvider.notifier)
-          .addProject(name, client, location, workerName);
+          .addProject(name, client, location, workerName,
+              industry: industry, tier: tier);
       if (mounted) context.push('/project/$refNumber');
     } catch (e) {
       if (mounted) {
@@ -111,15 +132,18 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.primary,
-              child: Text(
-                initial,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+            child: GestureDetector(
+              onTap: () => _showWorkerNameSheet(dismissible: true),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: AppColors.primary,
+                child: Text(
+                  initial,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
@@ -213,8 +237,8 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
                                 );
                         return _ProjectCard(
                           project: p,
-                          systemCount: systemCount,
-                          total: total,
+                          systemCount: _statsLoaded ? systemCount : null,
+                          total: _statsLoaded ? total : null,
                           onTap: () => context.push('/project/${p.id}'),
                         );
                       },
@@ -255,8 +279,8 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
 
 class _ProjectCard extends StatelessWidget {
   final dynamic project;
-  final int systemCount;
-  final double total;
+  final int? systemCount;
+  final double? total;
   final VoidCallback onTap;
 
   const _ProjectCard({
@@ -327,21 +351,33 @@ class _ProjectCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '$systemCount system${systemCount != 1 ? 's' : ''}',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppColors.textSecondaryOnCard,
-                    ),
-                  ),
-                  Text(
-                    formatINR(total),
-                    style: GoogleFonts.inter(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
+                  systemCount == null
+                      ? const ShimmerBox(
+                          width: 80,
+                          height: 12,
+                          color: AppColors.textSecondaryOnCard,
+                        )
+                      : Text(
+                          '$systemCount system${systemCount != 1 ? 's' : ''}',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryOnCard,
+                          ),
+                        ),
+                  total == null
+                      ? const ShimmerBox(
+                          width: 68,
+                          height: 20,
+                          color: AppColors.primary,
+                        )
+                      : Text(
+                          formatINR(total!),
+                          style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
                 ],
               ),
             ],
@@ -472,19 +508,22 @@ class _WorkerNameSheetState extends ConsumerState<_WorkerNameSheet> {
   }
 }
 
-class _NewProjectSheet extends StatefulWidget {
-  final void Function(String name, String client, String location) onValidSubmit;
+class _NewProjectSheet extends ConsumerStatefulWidget {
+  final void Function(String name, String client, String location,
+      String? industry, String? tier) onValidSubmit;
 
   const _NewProjectSheet({required this.onValidSubmit});
 
   @override
-  State<_NewProjectSheet> createState() => _NewProjectSheetState();
+  ConsumerState<_NewProjectSheet> createState() => _NewProjectSheetState();
 }
 
-class _NewProjectSheetState extends State<_NewProjectSheet> {
+class _NewProjectSheetState extends ConsumerState<_NewProjectSheet> {
   final _nameCtrl = TextEditingController();
   final _clientCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
+  String? _industry;
+  String? _tier;
 
   @override
   void dispose() {
@@ -500,13 +539,15 @@ class _NewProjectSheetState extends State<_NewProjectSheet> {
     final location = _locationCtrl.text.trim();
     if (name.isEmpty) return;
     Navigator.pop(context);
-    widget.onValidSubmit(name, client, location);
+    widget.onValidSubmit(name, client, location, _industry, _tier);
   }
 
   @override
   Widget build(BuildContext context) {
+    final industries = ref.watch(allIndustriesProvider);
+
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: EdgeInsets.only(
           left: 24,
           right: 24,
@@ -542,6 +583,14 @@ class _NewProjectSheetState extends State<_NewProjectSheet> {
             _Field(hint: 'Client Name', icon: Icons.person, controller: _clientCtrl),
             const SizedBox(height: 12),
             _Field(hint: 'Location', icon: Icons.location_on, controller: _locationCtrl),
+            const SizedBox(height: 16),
+            _IndustryTierFields(
+              industries: industries,
+              selectedIndustry: _industry,
+              selectedTier: _tier,
+              onIndustryChanged: (v) => setState(() => _industry = v),
+              onTierChanged: (v) => setState(() => _tier = v),
+            ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -602,6 +651,108 @@ class _Field extends StatelessWidget {
           borderSide: const BorderSide(color: AppColors.divider),
         ),
       ),
+    );
+  }
+}
+
+/// Shared industry dropdown + tier chip row used in New/Edit project sheets.
+class _IndustryTierFields extends StatelessWidget {
+  final List<String> industries;
+  final String? selectedIndustry;
+  final String? selectedTier;
+  final ValueChanged<String?> onIndustryChanged;
+  final ValueChanged<String?> onTierChanged;
+
+  const _IndustryTierFields({
+    required this.industries,
+    required this.selectedIndustry,
+    required this.selectedTier,
+    required this.onIndustryChanged,
+    required this.onTierChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Industry dropdown
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.divider),
+          ),
+          child: DropdownButton<String?>(
+            value: selectedIndustry,
+            isExpanded: true,
+            underline: const SizedBox.shrink(),
+            dropdownColor: Colors.white,
+            style: GoogleFonts.inter(color: AppColors.textOnCard),
+            hint: Row(
+              children: [
+                const Icon(Icons.business_center_outlined,
+                    size: 20, color: AppColors.textSecondaryOnCard),
+                const SizedBox(width: 8),
+                Text('Industry (optional)',
+                    style: GoogleFonts.inter(
+                        color: AppColors.textSecondaryOnCard)),
+              ],
+            ),
+            items: [
+              DropdownMenuItem<String?>(
+                value: null,
+                child: Text('Not specified',
+                    style: GoogleFonts.inter(
+                        color: AppColors.textSecondaryOnCard)),
+              ),
+              ...industries.map((ind) =>
+                  DropdownMenuItem<String?>(value: ind, child: Text(ind))),
+            ],
+            onChanged: onIndustryChanged,
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Tier chips
+        Row(
+          children: [
+            Text('Tier:',
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: AppColors.textSecondaryOnCard)),
+            const SizedBox(width: 12),
+            ...['Value', 'Premium'].map((t) {
+              final selected = selectedTier == t;
+              return GestureDetector(
+                onTap: () => onTierChanged(selected ? null : t),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.primary : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: selected ? AppColors.primary : AppColors.divider,
+                    ),
+                  ),
+                  child: Text(
+                    t,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w400,
+                      color: selected
+                          ? Colors.white
+                          : AppColors.textSecondaryOnCard,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ],
     );
   }
 }

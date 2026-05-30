@@ -160,10 +160,22 @@ function doPost(e) {
       let projectsSheet = wb.getSheetByName(PROJECTS_SHEET_NAME);
       if (!projectsSheet) {
         projectsSheet = wb.insertSheet(PROJECTS_SHEET_NAME);
-        projectsSheet.appendRow(['Ref. Number', 'Project Name', 'Client Name', 'Location', 'Created At', 'Worker']);
+        projectsSheet.appendRow(['Ref. Number', 'Project Name', 'Client Name', 'Location', 'Created At', 'Worker', 'Industry', 'Tier']);
       }
       const refNumber = generateRefNumber(projectsSheet);
-      projectsSheet.appendRow([refNumber, projectName, clientName || '', location || '', new Date().toISOString(), worker || '']);
+      // Build row by header name so column order in the sheet doesn't matter
+      const headers = projectsSheet.getRange(1, 1, 1, projectsSheet.getLastColumn()).getValues()[0];
+      const newRow = new Array(headers.length).fill('');
+      const set = (name, value) => { const i = headers.indexOf(name); if (i >= 0) newRow[i] = value; };
+      set('Ref. Number', refNumber);
+      set('Project Name', projectName);
+      set('Client Name', clientName || '');
+      set('Location', location || '');
+      set('Created At', new Date().toISOString());
+      set('Worker', worker || '');
+      set('Industry', body.industry || '');
+      set('Tier', body.tier || '');
+      projectsSheet.appendRow(newRow);
       const newSheet = wb.insertSheet(refNumber);
       newSheet.appendRow(['ID', 'System Type', 'Category', 'Product Name', 'Brand', 'Unit', 'Quantity', 'Rate', 'Amount', 'Note', 'Created At', 'Worker']);
       return sendJSON({ success: true, refNumber: refNumber });
@@ -256,11 +268,16 @@ function doPost(e) {
       const sheet = wb.getSheetByName(PROJECTS_SHEET_NAME);
       if (!sheet) return sendJSON({ success: false, error: 'Projects sheet not found' });
       const data = sheet.getDataRange().getValues();
+      const headers = data[0];
+      const industryCol = headers.indexOf('Industry') + 1;
+      const tierCol = headers.indexOf('Tier') + 1;
       for (let i = 1; i < data.length; i++) {
         if (String(data[i][0]) === refNumber) {
           if (projectName !== undefined) sheet.getRange(i + 1, 2).setValue(projectName);
           if (clientName !== undefined) sheet.getRange(i + 1, 3).setValue(clientName);
           if (location !== undefined) sheet.getRange(i + 1, 4).setValue(location);
+          if (industryCol > 0) sheet.getRange(i + 1, industryCol).setValue(body.industry || '');
+          if (tierCol > 0) sheet.getRange(i + 1, tierCol).setValue(body.tier || '');
           return sendJSON({ success: true });
         }
       }

@@ -10,6 +10,7 @@ import '../widgets/section_header.dart';
 import '../widgets/voice_note_button.dart';
 import '../providers/catalogue_provider.dart';
 import '../providers/line_items_provider.dart';
+import '../providers/projects_provider.dart';
 
 class AddLineItemScreen extends ConsumerStatefulWidget {
   final String projectId;
@@ -31,6 +32,7 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
   int _qty = 1;
   String _lang = 'EN';
   bool _saving = false;
+  bool _voiceRecording = false;
   final _noteCtrl = TextEditingController();
 
   double get _amount => _product != null ? _product!.rate * _qty : 0;
@@ -84,9 +86,20 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
     final catalogueAsync = ref.watch(catalogueProvider);
     final catalogueLoading = catalogueAsync.isLoading;
     final categories = ref.watch(categoriesForSystemProvider(widget.systemType));
-    final products = _category != null
-        ? ref.watch(productsByCategoryProvider(_category!))
-        : <Product>[];
+    final projectTier = ref.watch(projectsProvider).maybeWhen(
+          data: (projects) {
+            try {
+              return projects.firstWhere((p) => p.id == widget.projectId).tier;
+            } catch (_) {
+              return null;
+            }
+          },
+          orElse: () => null,
+        );
+    final tiered = _category != null
+        ? ref.watch(tieredProductsByCategoryProvider((_category!, projectTier)))
+        : (recommended: <Product>[], others: <Product>[]);
+    final hasTierSections = tiered.others.isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -115,18 +128,21 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
                   SectionHeader(title: 'CATEGORY'),
                   _FormCard(
                     child: catalogueLoading
-                        ? Row(children: [
-                            const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.primary)),
-                            const SizedBox(width: 12),
-                            Text('Loading catalogue...',
-                                style: GoogleFonts.inter(
-                                    color: AppColors.textSecondaryOnCard)),
-                          ])
+                        ? SizedBox(
+                            height: 48,
+                            child: Row(children: [
+                              const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.primary)),
+                              const SizedBox(width: 12),
+                              Text('Loading catalogue...',
+                                  style: GoogleFonts.inter(
+                                      color: AppColors.textSecondaryOnCard)),
+                            ]),
+                          )
                         : DropdownButton<String>(
                             value: _category,
                             isExpanded: true,
@@ -165,15 +181,56 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
                         style: GoogleFonts.inter(
                             color: AppColors.textSecondaryOnCard),
                       ),
-                      items: products
-                          .map((p) => DropdownMenuItem(
+                      items: [
+                        if (hasTierSections) ...[
+                          DropdownMenuItem<Product>(
+                            enabled: false,
+                            value: const Product(
+                                id: '__hdr_r__', category: '', name: '',
+                                brand: '', unit: '', rate: 0),
+                            child: Text(
+                              'RECOMMENDED',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ),
+                        ],
+                        ...tiered.recommended.map((p) => DropdownMenuItem(
+                              value: p,
+                              child: Text(
+                                '${p.name} — ${formatINR(p.rate)}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            )),
+                        if (hasTierSections) ...[
+                          DropdownMenuItem<Product>(
+                            enabled: false,
+                            value: const Product(
+                                id: '__hdr_a__', category: '', name: '',
+                                brand: '', unit: '', rate: 0),
+                            child: Text(
+                              'ALL PRODUCTS',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textSecondaryOnCard,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ),
+                          ...tiered.others.map((p) => DropdownMenuItem(
                                 value: p,
                                 child: Text(
                                   '${p.name} — ${formatINR(p.rate)}',
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                              ))
-                          .toList(),
+                              )),
+                        ],
+                      ],
                       onChanged: _category == null
                           ? null
                           : (v) => setState(() => _product = v),
@@ -244,6 +301,8 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
                         VoiceNoteButton(
                           currentLanguage: _lang,
                           onLanguageToggle: (l) => setState(() => _lang = l),
+                          onRecordingChanged: (r) =>
+                              setState(() => _voiceRecording = r),
                           onTranscript: (t) {
                             final appended = _noteCtrl.text.isEmpty
                                 ? t
@@ -256,30 +315,70 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
                           },
                         ),
                         const SizedBox(height: 12),
-                        TextField(
-                          controller: _noteCtrl,
-                          maxLines: 3,
-                          style:
-                              GoogleFonts.inter(color: AppColors.textOnCard),
-                          decoration: InputDecoration(
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                  color: AppColors.divider),
+                        Stack(
+                          children: [
+                            TextField(
+                              controller: _noteCtrl,
+                              maxLines: 3,
+                              enabled: !_voiceRecording,
+                              style: GoogleFonts.inter(
+                                  color: AppColors.textOnCard),
+                              decoration: InputDecoration(
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.divider),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.divider),
+                                ),
+                                disabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.divider),
+                                ),
+                                hintText:
+                                    'Tap mic to add a voice note, or type here',
+                                hintStyle: GoogleFonts.inter(
+                                  fontStyle: FontStyle.italic,
+                                  color: AppColors.textSecondaryOnCard,
+                                  fontSize: 13,
+                                ),
+                              ),
                             ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                  color: AppColors.divider),
-                            ),
-                            hintText:
-                                'Tap mic to add a voice note, or type here',
-                            hintStyle: GoogleFonts.inter(
-                              fontStyle: FontStyle.italic,
-                              color: AppColors.textSecondaryOnCard,
-                              fontSize: 13,
-                            ),
-                          ),
+                            if (_voiceRecording)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                        color: AppColors.primary,
+                                        width: 1.5),
+                                  ),
+                                  child: Center(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.mic,
+                                            color: AppColors.primary,
+                                            size: 16),
+                                        const SizedBox(width: 8),
+                                        Text('Listening…',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 13,
+                                              color: AppColors.primary,
+                                              fontWeight: FontWeight.w500,
+                                            )),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
@@ -288,7 +387,7 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -335,7 +434,7 @@ class _FormCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),

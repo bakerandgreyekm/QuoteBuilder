@@ -6,6 +6,23 @@ final systemTypeTagsProvider = FutureProvider<Map<String, List<String>>>((ref) {
   return ref.read(sheetsServiceProvider).getSystemTypeTags();
 });
 
+final systemIndustriesProvider = FutureProvider<Map<String, List<String>>>((ref) {
+  return ref.read(sheetsServiceProvider).getSystemTypeIndustries();
+});
+
+final allIndustriesProvider = Provider<List<String>>((ref) {
+  return ref.watch(systemIndustriesProvider).maybeWhen(
+    data: (map) {
+      final all = <String>{};
+      for (final industries in map.values) {
+        all.addAll(industries);
+      }
+      return all.toList()..sort();
+    },
+    orElse: () => [],
+  );
+});
+
 final categoriesForSystemProvider = Provider.family<List<String>, String>((ref, systemType) {
   final tagsAsync = ref.watch(systemTypeTagsProvider);
   return tagsAsync.maybeWhen(
@@ -46,5 +63,32 @@ final productsByCategoryProvider =
   return ref.watch(catalogueProvider).maybeWhen(
     data: (list) => list.where((p) => p.category == category).toList(),
     orElse: () => [],
+  );
+});
+
+/// Returns products split into recommended (tier match + blank) and others.
+/// When projectTier is null, all products are in recommended (no split).
+final tieredProductsByCategoryProvider = Provider.family<
+    ({List<Product> recommended, List<Product> others}),
+    (String, String?)>((ref, args) {
+  final (category, projectTier) = args;
+  return ref.watch(catalogueProvider).maybeWhen(
+    data: (list) {
+      final products = list.where((p) => p.category == category).toList();
+      if (projectTier == null) {
+        return (recommended: products, others: const []);
+      }
+      final recommended = <Product>[];
+      final others = <Product>[];
+      for (final p in products) {
+        if (p.tier.isEmpty || p.tier == projectTier) {
+          recommended.add(p);
+        } else {
+          others.add(p);
+        }
+      }
+      return (recommended: recommended, others: others);
+    },
+    orElse: () => (recommended: const [], others: const []),
   );
 });

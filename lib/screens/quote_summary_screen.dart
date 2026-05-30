@@ -24,6 +24,15 @@ class QuoteSummaryScreen extends ConsumerStatefulWidget {
 class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
   bool _generating = false;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(systemsProvider.notifier).loadForProject(widget.projectId);
+      ref.read(lineItemsProvider.notifier).loadForProject(widget.projectId);
+    });
+  }
+
   Future<void> _shareAs(String format) async {
     final projectsAsync = ref.read(projectsProvider);
     final systemsAsync = ref.read(systemsProvider);
@@ -200,9 +209,11 @@ class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
             ),
           ),
           body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
+            child: Column(
               children: [
+                Expanded(child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -250,6 +261,32 @@ class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
                                 color: AppColors.textSecondaryOnCard),
                           ),
                         ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      _TotalRow(
+                          label: 'Total (ex. GST)',
+                          value: formatINR(totalExGST)),
+                      const Divider(
+                          color: AppColors.divider, height: 20),
+                      _TotalRow(
+                          label: 'GST @18%', value: formatINR(gst)),
+                      const Divider(
+                          color: AppColors.divider, height: 20),
+                      _TotalRow(
+                        label: 'Grand Total',
+                        value: formatINR(grandTotal),
+                        isGrandTotal: true,
                       ),
                     ],
                   ),
@@ -305,55 +342,32 @@ class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      _TotalRow(
-                          label: 'Total (ex. GST)',
-                          value: formatINR(totalExGST)),
-                      const Divider(
-                          color: AppColors.divider, height: 20),
-                      _TotalRow(
-                          label: 'GST @18%', value: formatINR(gst)),
-                      const Divider(
-                          color: AppColors.divider, height: 20),
-                      _TotalRow(
-                        label: 'Grand Total',
-                        value: formatINR(grandTotal),
-                        isGrandTotal: true,
+                  ],
+                )),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          allItems.isEmpty ? null : _showFormatPicker,
+                      icon: const Icon(Icons.share),
+                      label: Text(
+                        'Share Quote',
+                        style: GoogleFonts.inter(
+                            fontSize: 16, fontWeight: FontWeight.w600),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton.icon(
-                    onPressed:
-                        allItems.isEmpty ? null : _showFormatPicker,
-                    icon: const Icon(Icons.share),
-                    label: Text(
-                      'Share Quote',
-                      style: GoogleFonts.inter(
-                          fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      disabledBackgroundColor: Colors.grey[300],
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        disabledBackgroundColor: Colors.grey[300],
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
               ],
             ),
           ),

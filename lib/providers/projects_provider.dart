@@ -10,12 +10,15 @@ class ProjectsNotifier extends AsyncNotifier<List<Project>> {
   }
 
   Future<String> addProject(
-      String name, String clientName, String location, String worker) async {
+      String name, String clientName, String location, String worker,
+      {String? industry, String? tier}) async {
     final refNumber = await ref.read(sheetsServiceProvider).createProject(
           projectName: name,
           clientName: clientName,
           location: location,
           worker: worker,
+          industry: industry,
+          tier: tier,
         );
     final newProject = Project(
       id: refNumber,
@@ -24,6 +27,8 @@ class ProjectsNotifier extends AsyncNotifier<List<Project>> {
       clientName: clientName,
       location: location,
       createdAt: DateTime.now(),
+      industry: industry,
+      tier: tier,
     );
     state = AsyncData([...state.value ?? [], newProject]);
     return refNumber;
@@ -34,19 +39,31 @@ class ProjectsNotifier extends AsyncNotifier<List<Project>> {
     required String name,
     required String clientName,
     required String location,
+    required String? industry,
+    required String? tier,
   }) async {
     await ref.read(sheetsServiceProvider).updateProject(
           refNumber: refNumber,
           projectName: name,
           clientName: clientName,
           location: location,
+          industry: industry,
+          tier: tier,
         );
     final current = state.value ?? [];
-    state = AsyncData(current
-        .map((p) => p.id == refNumber
-            ? p.copyWith(name: name, clientName: clientName, location: location)
-            : p)
-        .toList());
+    state = AsyncData(current.map((p) {
+      if (p.id != refNumber) return p;
+      return Project(
+        id: p.id,
+        refNumber: p.refNumber,
+        name: name,
+        clientName: clientName,
+        location: location,
+        createdAt: p.createdAt,
+        industry: industry,
+        tier: tier,
+      );
+    }).toList());
   }
 
   Future<void> deleteProject(String refNumber) async {

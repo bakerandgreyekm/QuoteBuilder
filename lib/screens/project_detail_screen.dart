@@ -10,6 +10,7 @@ import '../models/project.dart';
 import '../providers/projects_provider.dart';
 import '../providers/systems_provider.dart';
 import '../providers/line_items_provider.dart';
+import '../providers/catalogue_provider.dart';
 import 'add_system_sheet.dart';
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
@@ -84,12 +85,14 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       ),
       builder: (_) => _EditProjectSheet(
         project: project,
-        onSave: (name, client, location) async {
+        onSave: (name, client, location, industry, tier) async {
           await ref.read(projectsProvider.notifier).updateProject(
                 refNumber: project.refNumber,
                 name: name,
                 clientName: client,
                 location: location,
+                industry: industry,
+                tier: tier,
               );
         },
       ),
@@ -274,6 +277,25 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                                 color: AppColors.textSecondaryOnDark)),
                       ],
                     ),
+                    if (project.industry != null || project.tier != null) ...[
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          if (project.industry != null)
+                            _InfoBadge(
+                              icon: Icons.business_center_outlined,
+                              label: project.industry!,
+                            ),
+                          if (project.tier != null)
+                            _InfoBadge(
+                              icon: Icons.star_outline,
+                              label: project.tier!,
+                              highlight: project.tier == 'Premium',
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -366,20 +388,23 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   }
 }
 
-class _EditProjectSheet extends StatefulWidget {
+class _EditProjectSheet extends ConsumerStatefulWidget {
   final Project project;
-  final Future<void> Function(String name, String client, String location) onSave;
+  final Future<void> Function(String name, String client, String location,
+      String? industry, String? tier) onSave;
 
   const _EditProjectSheet({required this.project, required this.onSave});
 
   @override
-  State<_EditProjectSheet> createState() => _EditProjectSheetState();
+  ConsumerState<_EditProjectSheet> createState() => _EditProjectSheetState();
 }
 
-class _EditProjectSheetState extends State<_EditProjectSheet> {
+class _EditProjectSheetState extends ConsumerState<_EditProjectSheet> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _clientCtrl;
   late final TextEditingController _locationCtrl;
+  String? _industry;
+  String? _tier;
   bool _saving = false;
 
   @override
@@ -388,6 +413,8 @@ class _EditProjectSheetState extends State<_EditProjectSheet> {
     _nameCtrl = TextEditingController(text: widget.project.name);
     _clientCtrl = TextEditingController(text: widget.project.clientName);
     _locationCtrl = TextEditingController(text: widget.project.location);
+    _industry = widget.project.industry;
+    _tier = widget.project.tier;
   }
 
   @override
@@ -403,7 +430,8 @@ class _EditProjectSheetState extends State<_EditProjectSheet> {
     if (name.isEmpty) return;
     setState(() => _saving = true);
     try {
-      await widget.onSave(name, _clientCtrl.text.trim(), _locationCtrl.text.trim());
+      await widget.onSave(name, _clientCtrl.text.trim(),
+          _locationCtrl.text.trim(), _industry, _tier);
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -417,8 +445,10 @@ class _EditProjectSheetState extends State<_EditProjectSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final industries = ref.watch(allIndustriesProvider);
+
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: EdgeInsets.only(
           left: 24,
           right: 24,
@@ -454,6 +484,14 @@ class _EditProjectSheetState extends State<_EditProjectSheet> {
             _EditField(hint: 'Client Name', icon: Icons.person, controller: _clientCtrl),
             const SizedBox(height: 12),
             _EditField(hint: 'Location', icon: Icons.location_on, controller: _locationCtrl),
+            const SizedBox(height: 16),
+            _IndustryTierFields(
+              industries: industries,
+              selectedIndustry: _industry,
+              selectedTier: _tier,
+              onIndustryChanged: (v) => setState(() => _industry = v),
+              onTierChanged: (v) => setState(() => _tier = v),
+            ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -485,6 +523,152 @@ class _EditProjectSheetState extends State<_EditProjectSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _InfoBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool highlight;
+
+  const _InfoBadge({
+    required this.icon,
+    required this.label,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: highlight
+            ? AppColors.primary.withValues(alpha: 0.15)
+            : Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: highlight
+              ? AppColors.primary.withValues(alpha: 0.5)
+              : Colors.white.withValues(alpha: 0.20),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon,
+              size: 12,
+              color: highlight ? AppColors.primary : AppColors.textSecondaryOnDark),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: highlight ? AppColors.primary : AppColors.textSecondaryOnDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IndustryTierFields extends StatelessWidget {
+  final List<String> industries;
+  final String? selectedIndustry;
+  final String? selectedTier;
+  final ValueChanged<String?> onIndustryChanged;
+  final ValueChanged<String?> onTierChanged;
+
+  const _IndustryTierFields({
+    required this.industries,
+    required this.selectedIndustry,
+    required this.selectedTier,
+    required this.onIndustryChanged,
+    required this.onTierChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.divider),
+          ),
+          child: DropdownButton<String?>(
+            value: selectedIndustry,
+            isExpanded: true,
+            underline: const SizedBox.shrink(),
+            dropdownColor: Colors.white,
+            style: GoogleFonts.inter(color: AppColors.textOnCard),
+            hint: Row(
+              children: [
+                const Icon(Icons.business_center_outlined,
+                    size: 20, color: AppColors.textSecondaryOnCard),
+                const SizedBox(width: 8),
+                Text('Industry (optional)',
+                    style: GoogleFonts.inter(
+                        color: AppColors.textSecondaryOnCard)),
+              ],
+            ),
+            items: [
+              DropdownMenuItem<String?>(
+                value: null,
+                child: Text('Not specified',
+                    style: GoogleFonts.inter(
+                        color: AppColors.textSecondaryOnCard)),
+              ),
+              ...industries.map((ind) =>
+                  DropdownMenuItem<String?>(value: ind, child: Text(ind))),
+            ],
+            onChanged: onIndustryChanged,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Text('Tier:',
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: AppColors.textSecondaryOnCard)),
+            const SizedBox(width: 12),
+            ...['Value', 'Premium'].map((t) {
+              final selected = selectedTier == t;
+              return GestureDetector(
+                onTap: () => onTierChanged(selected ? null : t),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.primary : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: selected ? AppColors.primary : AppColors.divider,
+                    ),
+                  ),
+                  child: Text(
+                    t,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w400,
+                      color: selected
+                          ? Colors.white
+                          : AppColors.textSecondaryOnCard,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ],
     );
   }
 }
