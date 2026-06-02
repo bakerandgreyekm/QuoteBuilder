@@ -40,10 +40,44 @@ class LineItemsNotifier extends AsyncNotifier<List<LineItem>> {
           rate: item.rate,
           noteText: item.noteText,
           worker: worker,
+          area: item.area,
         );
     final itemWithId = item.copyWith(id: id);
     final existing = state.value ?? [];
     state = AsyncData([...existing, itemWithId]);
+  }
+
+  Future<void> updateItem({
+    required String refNumber,
+    required String itemId,
+    required int quantity,
+    required String noteText,
+    String? area,
+  }) async {
+    await ref.read(sheetsServiceProvider).updateLineItem(
+          refNumber: refNumber,
+          itemId: itemId,
+          quantity: quantity,
+          noteText: noteText,
+          area: area,
+        );
+    final existing = state.value ?? [];
+    state = AsyncData(existing.map((i) {
+      if (i.id != itemId) return i;
+      return LineItem(
+        id: i.id,
+        projectId: i.projectId,
+        systemType: i.systemType,
+        category: i.category,
+        productName: i.productName,
+        brand: i.brand,
+        unit: i.unit,
+        quantity: quantity,
+        rate: i.rate,
+        noteText: noteText,
+        area: area,
+      );
+    }).toList());
   }
 
   Future<void> deleteItem(String refNumber, String itemId) async {

@@ -11,6 +11,7 @@ class Project {
   final String? industry;
   /// null = no filter, 'Value' or 'Premium'
   final String? tier;
+  final List<String> areas;
 
   const Project({
     required this.id,
@@ -21,6 +22,7 @@ class Project {
     required this.refNumber,
     this.industry,
     this.tier,
+    this.areas = const [],
   });
 
   Project copyWith({
@@ -32,6 +34,7 @@ class Project {
     String? refNumber,
     String? industry,
     String? tier,
+    List<String>? areas,
   }) {
     return Project(
       id: id ?? this.id,
@@ -42,6 +45,7 @@ class Project {
       refNumber: refNumber ?? this.refNumber,
       industry: industry ?? this.industry,
       tier: tier ?? this.tier,
+      areas: areas ?? this.areas,
     );
   }
 
@@ -49,6 +53,10 @@ class Project {
     final refNumber = m['Ref. Number']?.toString() ?? '';
     final industry = m['Industry']?.toString().trim();
     final tier = m['Tier']?.toString().trim();
+    final areasRaw = m['Areas']?.toString().trim() ?? '';
+    final areas = areasRaw.isEmpty
+        ? <String>[]
+        : areasRaw.split(',').map((a) => a.trim()).where((a) => a.isNotEmpty).toList();
     return Project(
       id: refNumber,
       refNumber: refNumber,
@@ -60,6 +68,7 @@ class Project {
           : DateTime.now(),
       industry: (industry?.isEmpty ?? true) ? null : industry,
       tier: (tier?.isEmpty ?? true) ? null : tier,
+      areas: areas,
     );
   }
 

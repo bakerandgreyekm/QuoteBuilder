@@ -62,6 +62,29 @@ class ProjectsNotifier extends AsyncNotifier<List<Project>> {
         createdAt: p.createdAt,
         industry: industry,
         tier: tier,
+        areas: p.areas,
+      );
+    }).toList());
+  }
+
+  Future<void> updateAreas(String projectId, List<String> areas) async {
+    await ref.read(sheetsServiceProvider).updateProjectAreas(
+      refNumber: projectId,
+      areas: areas,
+    );
+    final current = state.value ?? [];
+    state = AsyncData(current.map((p) {
+      if (p.id != projectId) return p;
+      return Project(
+        id: p.id,
+        refNumber: p.refNumber,
+        name: p.name,
+        clientName: p.clientName,
+        location: p.location,
+        createdAt: p.createdAt,
+        industry: p.industry,
+        tier: p.tier,
+        areas: areas,
       );
     }).toList());
   }

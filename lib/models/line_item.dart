@@ -12,6 +12,7 @@ class LineItem {
   final int quantity;
   final double rate;
   final String noteText;
+  final String? area;
 
   const LineItem({
     required this.id,
@@ -24,6 +25,7 @@ class LineItem {
     required this.quantity,
     required this.rate,
     this.noteText = '',
+    this.area,
   });
 
   double get amount => quantity * rate;
@@ -42,6 +44,7 @@ class LineItem {
       rate: (m['Rate'] as num?)?.toDouble() ??
           double.tryParse(m['Rate']?.toString() ?? '0') ?? 0.0,
       noteText: m['Note']?.toString() ?? '',
+      area: (m['Area']?.toString().trim().isEmpty ?? true) ? null : m['Area']?.toString().trim(),
     );
   }
 
@@ -56,6 +59,7 @@ class LineItem {
     int? quantity,
     double? rate,
     String? noteText,
+    String? area,
   }) {
     return LineItem(
       id: id ?? this.id,
@@ -68,6 +72,7 @@ class LineItem {
       quantity: quantity ?? this.quantity,
       rate: rate ?? this.rate,
       noteText: noteText ?? this.noteText,
+      area: area ?? this.area,
     );
   }
 

@@ -148,6 +148,7 @@ class SheetsService {
     required double rate,
     required String noteText,
     required String worker,
+    String? area,
   }) async {
     final result = await _post({
       'action': 'addLineItem',
@@ -161,8 +162,37 @@ class SheetsService {
       'rate': rate,
       'noteText': noteText,
       'worker': worker,
+      'area': area ?? '',
     });
     return result['id'] as String;
+  }
+
+  Future<void> updateProjectAreas({
+    required String refNumber,
+    required List<String> areas,
+  }) async {
+    await _post({
+      'action': 'updateProjectAreas',
+      'refNumber': refNumber,
+      'areas': areas.join(','),
+    });
+  }
+
+  Future<void> updateLineItem({
+    required String refNumber,
+    required String itemId,
+    required int quantity,
+    required String noteText,
+    String? area,
+  }) async {
+    await _post({
+      'action': 'updateLineItem',
+      'refNumber': refNumber,
+      'itemId': itemId,
+      'quantity': quantity,
+      'noteText': noteText,
+      'area': area ?? '',
+    });
   }
 
   Future<void> deleteLineItem({

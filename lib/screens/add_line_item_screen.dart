@@ -30,6 +30,7 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
   String? _category;
   Product? _product;
   int _qty = 1;
+  String? _area;
   String _lang = 'EN';
   bool _saving = false;
   bool _voiceRecording = false;
@@ -59,6 +60,7 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
               quantity: _qty,
               rate: _product!.rate,
               noteText: _noteCtrl.text.trim(),
+              area: _area,
             ),
           );
       if (mounted) {
@@ -86,16 +88,18 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
     final catalogueAsync = ref.watch(catalogueProvider);
     final catalogueLoading = catalogueAsync.isLoading;
     final categories = ref.watch(categoriesForSystemProvider(widget.systemType));
-    final projectTier = ref.watch(projectsProvider).maybeWhen(
+    final project = ref.watch(projectsProvider).maybeWhen(
           data: (projects) {
             try {
-              return projects.firstWhere((p) => p.id == widget.projectId).tier;
+              return projects.firstWhere((p) => p.id == widget.projectId);
             } catch (_) {
               return null;
             }
           },
           orElse: () => null,
         );
+    final projectTier = project?.tier;
+    final projectAreas = project?.areas ?? const <String>[];
     final tiered = _category != null
         ? ref.watch(tieredProductsByCategoryProvider((_category!, projectTier)))
         : (recommended: <Product>[], others: <Product>[]);
@@ -293,6 +297,35 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
                       ],
                     ),
                   ),
+                  if (projectAreas.isNotEmpty) ...[
+                    SectionHeader(title: 'AREA (OPTIONAL)'),
+                    _FormCard(
+                      child: DropdownButton<String?>(
+                        value: _area,
+                        isExpanded: true,
+                        dropdownColor: Colors.white,
+                        underline: const SizedBox.shrink(),
+                        style: GoogleFonts.inter(color: AppColors.textOnCard),
+                        hint: Text(
+                          'No area',
+                          style: GoogleFonts.inter(
+                              color: AppColors.textSecondaryOnCard),
+                        ),
+                        items: [
+                          DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('No area',
+                                style: GoogleFonts.inter(
+                                    color: AppColors.textSecondaryOnCard)),
+                          ),
+                          ...projectAreas.map((a) =>
+                              DropdownMenuItem<String?>(
+                                  value: a, child: Text(a))),
+                        ],
+                        onChanged: (v) => setState(() => _area = v),
+                      ),
+                    ),
+                  ],
                   SectionHeader(title: 'NOTES (OPTIONAL)'),
                   _FormCard(
                     child: Column(

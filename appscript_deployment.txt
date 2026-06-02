@@ -105,6 +105,7 @@ function doGet(e) {
         'Amount': parseFloat(r['Amount']) || 0,
         'Note': String(r['Note'] || ''),
         'Created At': String(r['Created At'] || ''),
+        'Area': String(r['Area'] || ''),
       }));
       return sendJSON({ success: true, data: parsed });
     } catch (err) { return sendJSON({ success: false, error: err.message }); }
@@ -160,7 +161,7 @@ function doPost(e) {
       let projectsSheet = wb.getSheetByName(PROJECTS_SHEET_NAME);
       if (!projectsSheet) {
         projectsSheet = wb.insertSheet(PROJECTS_SHEET_NAME);
-        projectsSheet.appendRow(['Ref. Number', 'Project Name', 'Client Name', 'Location', 'Created At', 'Worker', 'Industry', 'Tier']);
+        projectsSheet.appendRow(['Ref. Number', 'Project Name', 'Client Name', 'Location', 'Created At', 'Worker', 'Industry', 'Tier', 'Areas']);
       }
       const refNumber = generateRefNumber(projectsSheet);
       // Build row by header name so column order in the sheet doesn't matter
@@ -175,9 +176,14 @@ function doPost(e) {
       set('Worker', worker || '');
       set('Industry', body.industry || '');
       set('Tier', body.tier || '');
+      set('Areas', '');
       projectsSheet.appendRow(newRow);
       const newSheet = wb.insertSheet(refNumber);
-      newSheet.appendRow(['ID', 'System Type', 'Category', 'Product Name', 'Brand', 'Unit', 'Quantity', 'Rate', 'Amount', 'Note', 'Created At', 'Worker']);
+      newSheet.appendRow(['ID', 'System Type', 'Category', 'Product Name', 'Brand', 'Unit', 'Quantity', 'Rate', 'Amount', 'Note', 'Created At', 'Worker', 'Area']);
+      const headerRange = newSheet.getRange(1, 1, 1, newSheet.getLastColumn());
+      headerRange.setBackground('#000000');
+      headerRange.setFontColor('#FFFFFF');
+      headerRange.setFontWeight('bold');
       return sendJSON({ success: true, refNumber: refNumber });
     } catch (err) { return sendJSON({ success: false, error: err.message }); }
   }
@@ -192,20 +198,23 @@ function doPost(e) {
       const id = generateId();
       const now = new Date().toISOString();
       const amount = (parseFloat(body.quantity) || 0) * (parseFloat(body.rate) || 0);
-      sheet.appendRow([
-        id,
-        body.systemType || '',
-        body.category || '',
-        body.productName || '',
-        body.brand || '',
-        body.unit || '',
-        parseFloat(body.quantity) || 0,
-        parseFloat(body.rate) || 0,
-        amount,
-        body.noteText || '',
-        now,
-        body.worker || '',
-      ]);
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      const newRow = new Array(headers.length).fill('');
+      const set = (name, value) => { const i = headers.indexOf(name); if (i >= 0) newRow[i] = value; };
+      set('ID', id);
+      set('System Type', body.systemType || '');
+      set('Category', body.category || '');
+      set('Product Name', body.productName || '');
+      set('Brand', body.brand || '');
+      set('Unit', body.unit || '');
+      set('Quantity', parseFloat(body.quantity) || 0);
+      set('Rate', parseFloat(body.rate) || 0);
+      set('Amount', amount);
+      set('Note', body.noteText || '');
+      set('Created At', now);
+      set('Worker', body.worker || '');
+      set('Area', body.area || '');
+      sheet.appendRow(newRow);
       return sendJSON({ success: true, id: id });
     } catch (err) { return sendJSON({ success: false, error: err.message }); }
   }
@@ -282,6 +291,57 @@ function doPost(e) {
         }
       }
       return sendJSON({ success: false, error: 'Project not found' });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'updateProjectAreas') {
+    const { refNumber, areas } = body;
+    if (!refNumber) return sendJSON({ success: false, error: 'refNumber required' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(PROJECTS_SHEET_NAME);
+      if (!sheet) return sendJSON({ success: false, error: 'Projects sheet not found' });
+      const data = sheet.getDataRange().getValues();
+      const headers = data[0];
+      const areasCol = headers.indexOf('Areas') + 1;
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === refNumber) {
+          if (areasCol > 0) sheet.getRange(i + 1, areasCol).setValue(areas || '');
+          return sendJSON({ success: true });
+        }
+      }
+      return sendJSON({ success: false, error: 'Project not found' });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  if (action === 'updateLineItem') {
+    const { refNumber, itemId } = body;
+    if (!refNumber || !itemId) return sendJSON({ success: false, error: 'Missing required fields' });
+    try {
+      const wb = SpreadsheetApp.openById(PROJECT_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(refNumber);
+      if (!sheet) return sendJSON({ success: false, error: 'Project sheet not found' });
+      const data = sheet.getDataRange().getValues();
+      const headers = data[0];
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === String(itemId)) {
+          const qtyCol = headers.indexOf('Quantity') + 1;
+          const rateCol = headers.indexOf('Rate') + 1;
+          const amountCol = headers.indexOf('Amount') + 1;
+          const noteCol = headers.indexOf('Note') + 1;
+          const areaCol = headers.indexOf('Area') + 1;
+          if (body.quantity !== undefined && qtyCol > 0) {
+            const qty = parseFloat(body.quantity) || 0;
+            const rate = rateCol > 0 ? (parseFloat(data[i][rateCol - 1]) || 0) : 0;
+            sheet.getRange(i + 1, qtyCol).setValue(qty);
+            if (amountCol > 0) sheet.getRange(i + 1, amountCol).setValue(qty * rate);
+          }
+          if (body.noteText !== undefined && noteCol > 0) sheet.getRange(i + 1, noteCol).setValue(body.noteText);
+          if (body.area !== undefined && areaCol > 0) sheet.getRange(i + 1, areaCol).setValue(body.area);
+          return sendJSON({ success: true });
+        }
+      }
+      return sendJSON({ success: false, error: 'Item not found' });
     } catch (err) { return sendJSON({ success: false, error: err.message }); }
   }
 

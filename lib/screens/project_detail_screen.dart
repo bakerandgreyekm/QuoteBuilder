@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../utils.dart';
 import '../utils/system_icons.dart';
 import '../widgets/running_total_bar.dart';
+import '../models/line_item.dart';
 import '../models/project.dart';
 import '../providers/projects_provider.dart';
 import '../providers/systems_provider.dart';
@@ -26,6 +27,8 @@ class ProjectDetailScreen extends ConsumerStatefulWidget {
 class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   bool _deleting = false;
   bool _loadingSystems = true;
+  bool _viewAreas = false;
+  bool _areasLoading = false;
 
   @override
   void initState() {
@@ -97,6 +100,88 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         },
       ),
     );
+  }
+
+  void _promptAddArea(BuildContext context, Project project) async {
+    final ctrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        title: Text('Add Area',
+            style: GoogleFonts.inter(
+                fontWeight: FontWeight.w700, color: AppColors.textOnDark)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          style: GoogleFonts.inter(color: AppColors.textOnDark),
+          cursorColor: AppColors.primary,
+          decoration: InputDecoration(
+            hintText: 'e.g. Lobby',
+            hintStyle:
+                GoogleFonts.inter(color: AppColors.textSecondaryOnDark),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide:
+                  const BorderSide(color: AppColors.textSecondaryOnDark),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide:
+                  const BorderSide(color: AppColors.textSecondaryOnDark),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppColors.primary),
+            ),
+          ),
+          onSubmitted: (v) {
+            final n = v.trim();
+            if (n.isNotEmpty) Navigator.pop(ctx, n);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel',
+                style: GoogleFonts.inter(
+                    color: AppColors.textSecondaryOnDark)),
+          ),
+          TextButton(
+            onPressed: () {
+              final n = ctrl.text.trim();
+              if (n.isNotEmpty) Navigator.pop(ctx, n);
+            },
+            child: Text('Add',
+                style: GoogleFonts.inter(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (name == null || !mounted) return;
+    if (project.areas.contains(name)) return;
+    setState(() => _areasLoading = true);
+    try {
+      await ref
+          .read(projectsProvider.notifier)
+          .updateAreas(project.id, [...project.areas, name]);
+    } finally {
+      if (mounted) setState(() => _areasLoading = false);
+    }
+  }
+
+  void _removeArea(Project project, String name) async {
+    setState(() => _areasLoading = true);
+    try {
+      await ref.read(projectsProvider.notifier).updateAreas(
+          project.id, project.areas.where((a) => a != name).toList());
+    } finally {
+      if (mounted) setState(() => _areasLoading = false);
+    }
   }
 
   void _showAddSystemSheet(BuildContext context) {
@@ -299,50 +384,77 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   ],
                 ),
               ),
+              _AreasStrip(
+                areas: project.areas,
+                isLoading: _areasLoading,
+                onAdd: () => _promptAddArea(context, project),
+                onRemove: (name) => _removeArea(project, name),
+              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-                child: Text(
-                  'SYSTEMS',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondaryOnDark,
-                    letterSpacing: 1.2,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _TabButton(
+                          label: 'Systems',
+                          selected: !_viewAreas,
+                          onTap: () => setState(() => _viewAreas = false),
+                        ),
+                      ),
+                      Expanded(
+                        child: _TabButton(
+                          label: 'Areas',
+                          selected: _viewAreas,
+                          onTap: () => setState(() => _viewAreas = true),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              if (_loadingSystems)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 32),
-                  child: Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
-                  ),
-                )
-              else if (systems.isEmpty)
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                  child: Center(
-                    child: Text(
-                      'No systems added yet.\nTap "Add System" to get started.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: AppColors.textSecondaryOnDark,
+              if (!_viewAreas) ...[
+                if (_loadingSystems)
+                  const Padding(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+                    child: Center(
+                      child:
+                          CircularProgressIndicator(color: AppColors.primary),
+                    ),
+                  )
+                else if (systems.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 24),
+                    child: Center(
+                      child: Text(
+                        'No systems added yet.\nTap "Add System" to get started.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: AppColors.textSecondaryOnDark,
+                        ),
                       ),
                     ),
-                  ),
-                )
-              else
-                for (final system in systems) ...[
-                  _SystemRow(
-                    projectId: widget.projectId,
-                    system: system,
-                    onTap: () => context.push(
-                      '/project/${widget.projectId}/system/${system.systemType}',
+                  )
+                else
+                  for (final system in systems)
+                    _SystemRow(
+                      projectId: widget.projectId,
+                      system: system,
+                      onTap: () => context.push(
+                        '/project/${widget.projectId}/system/${system.systemType}',
+                      ),
                     ),
-                  ),
-                ],
+              ] else ...[
+                ..._buildAreaWidgets(project),
+              ],
             ],
           ),
               if (_deleting)
@@ -377,6 +489,61 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         );
       },
     );
+  }
+
+  List<Widget> _buildAreaWidgets(Project project) {
+    final lineItems = ref.watch(lineItemsProvider).maybeWhen(
+          data: (items) =>
+              items.where((i) => i.projectId == widget.projectId).toList(),
+          orElse: () => <LineItem>[],
+        );
+
+    if (project.areas.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+          child: Center(
+            child: Text(
+              'No areas defined yet.\nTap "+ Add Area" above to get started.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                  fontSize: 14, color: AppColors.textSecondaryOnDark),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    final widgets = <Widget>[];
+    for (final area in project.areas) {
+      final items = lineItems.where((i) => i.area == area).toList();
+      widgets.add(_AreaSectionLabel(area));
+      if (items.isEmpty) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 16, 8),
+          child: Text('No items',
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: AppColors.textSecondaryOnDark)),
+        ));
+      } else {
+        for (final item in items) {
+          widgets.add(_AreaItemRow(item: item));
+        }
+      }
+    }
+
+    final generalItems = lineItems.where((i) {
+      final a = i.area;
+      return a == null || a.isEmpty || !project.areas.contains(a);
+    }).toList();
+    if (generalItems.isNotEmpty) {
+      widgets.add(const _AreaSectionLabel('GENERAL'));
+      for (final item in generalItems) {
+        widgets.add(_AreaItemRow(item: item));
+      }
+    }
+
+    return widgets;
   }
 
   String _formatDate(DateTime dt) {
@@ -703,6 +870,255 @@ class _EditField extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.divider),
         ),
+      ),
+    );
+  }
+}
+
+class _AreasStrip extends StatelessWidget {
+  final List<String> areas;
+  final bool isLoading;
+  final VoidCallback onAdd;
+  final ValueChanged<String> onRemove;
+
+  const _AreasStrip({
+    required this.areas,
+    required this.isLoading,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: isLoading ? null : onAdd,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.6)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isLoading)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    else
+                      const Icon(Icons.add, size: 14, color: AppColors.primary),
+                    const SizedBox(width: 4),
+                    Text('Add Area',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.primary)),
+                  ],
+                ),
+              ),
+            ),
+            ...areas.map((a) => Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: _AreaChip(label: a, onRemove: () => onRemove(a)),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AreaChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onRemove;
+
+  const _AreaChip({required this.label, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.only(left: 12, right: 6, top: 6, bottom: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border:
+            Border.all(color: Colors.white.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: AppColors.textOnDark)),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: onRemove,
+            child: const Icon(Icons.close,
+                size: 14, color: AppColors.textSecondaryOnDark),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TabButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : AppColors.textSecondaryOnDark,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AreaSectionLabel extends StatelessWidget {
+  final String label;
+
+  const _AreaSectionLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+      child: Row(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textSecondaryOnDark.withValues(alpha: 0.6),
+              letterSpacing: 1.4,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              height: 1,
+              color: Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AreaItemRow extends StatelessWidget {
+  final LineItem item;
+
+  const _AreaItemRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.productName,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textOnCard,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        item.systemType,
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${item.quantity} × ${formatINR(item.rate)}',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textSecondaryOnCard,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Text(
+            formatINR(item.amount),
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textOnCard,
+            ),
+          ),
+        ],
       ),
     );
   }
