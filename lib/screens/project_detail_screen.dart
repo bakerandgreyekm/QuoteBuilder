@@ -28,7 +28,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   bool _deleting = false;
   bool _loadingSystems = true;
   bool _viewAreas = false;
-  bool _areasLoading = false;
 
   @override
   void initState() {
@@ -102,86 +101,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     );
   }
 
-  void _promptAddArea(BuildContext context, Project project) async {
-    final ctrl = TextEditingController();
-    final name = await showDialog<String>(
+  void _showAreasManager(BuildContext context) {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceDark,
-        title: Text('Add Area',
-            style: GoogleFonts.inter(
-                fontWeight: FontWeight.w700, color: AppColors.textOnDark)),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          style: GoogleFonts.inter(color: AppColors.textOnDark),
-          cursorColor: AppColors.primary,
-          decoration: InputDecoration(
-            hintText: 'e.g. Lobby',
-            hintStyle:
-                GoogleFonts.inter(color: AppColors.textSecondaryOnDark),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide:
-                  const BorderSide(color: AppColors.textSecondaryOnDark),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide:
-                  const BorderSide(color: AppColors.textSecondaryOnDark),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.primary),
-            ),
-          ),
-          onSubmitted: (v) {
-            final n = v.trim();
-            if (n.isNotEmpty) Navigator.pop(ctx, n);
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel',
-                style: GoogleFonts.inter(
-                    color: AppColors.textSecondaryOnDark)),
-          ),
-          TextButton(
-            onPressed: () {
-              final n = ctrl.text.trim();
-              if (n.isNotEmpty) Navigator.pop(ctx, n);
-            },
-            child: Text('Add',
-                style: GoogleFonts.inter(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AreasManagerSheet(projectId: widget.projectId),
     );
-    ctrl.dispose();
-    if (name == null || !mounted) return;
-    if (project.areas.contains(name)) return;
-    setState(() => _areasLoading = true);
-    try {
-      await ref
-          .read(projectsProvider.notifier)
-          .updateAreas(project.id, [...project.areas, name]);
-    } finally {
-      if (mounted) setState(() => _areasLoading = false);
-    }
-  }
-
-  void _removeArea(Project project, String name) async {
-    setState(() => _areasLoading = true);
-    try {
-      await ref.read(projectsProvider.notifier).updateAreas(
-          project.id, project.areas.where((a) => a != name).toList());
-    } finally {
-      if (mounted) setState(() => _areasLoading = false);
-    }
   }
 
   void _showAddSystemSheet(BuildContext context) {
@@ -362,33 +288,63 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                                 color: AppColors.textSecondaryOnDark)),
                       ],
                     ),
-                    if (project.industry != null || project.tier != null) ...[
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          if (project.industry != null)
-                            _InfoBadge(
-                              icon: Icons.business_center_outlined,
-                              label: project.industry!,
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              if (project.industry != null)
+                                _InfoBadge(
+                                  icon: Icons.business_center_outlined,
+                                  label: project.industry!,
+                                ),
+                              if (project.tier != null)
+                                _InfoBadge(
+                                  icon: Icons.star_outline,
+                                  label: project.tier!,
+                                  highlight: project.tier == 'Premium',
+                                ),
+                            ],
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => _showAreasManager(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          if (project.tier != null)
-                            _InfoBadge(
-                              icon: Icons.star_outline,
-                              label: project.tier!,
-                              highlight: project.tier == 'Premium',
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.tune,
+                                    size: 13,
+                                    color: AppColors.textOnCard),
+                                const SizedBox(width: 6),
+                                Text(
+                                  project.areas.isEmpty
+                                      ? 'Manage Areas'
+                                      : 'Areas (${project.areas.length})',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textOnCard,
+                                  ),
+                                ),
+                              ],
                             ),
-                        ],
-                      ),
-                    ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-              ),
-              _AreasStrip(
-                areas: project.areas,
-                isLoading: _areasLoading,
-                onAdd: () => _promptAddArea(context, project),
-                onRemove: (name) => _removeArea(project, name),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -875,99 +831,279 @@ class _EditField extends StatelessWidget {
   }
 }
 
-class _AreasStrip extends StatelessWidget {
-  final List<String> areas;
-  final bool isLoading;
-  final VoidCallback onAdd;
-  final ValueChanged<String> onRemove;
+class _AreasManagerSheet extends ConsumerStatefulWidget {
+  final String projectId;
 
-  const _AreasStrip({
-    required this.areas,
-    required this.isLoading,
-    required this.onAdd,
-    required this.onRemove,
-  });
+  const _AreasManagerSheet({required this.projectId});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            GestureDetector(
-              onTap: isLoading ? null : onAdd,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.6)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isLoading)
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.5,
-                          color: AppColors.primary,
-                        ),
-                      )
-                    else
-                      const Icon(Icons.add, size: 14, color: AppColors.primary),
-                    const SizedBox(width: 4),
-                    Text('Add Area',
-                        style: GoogleFonts.inter(
-                            fontSize: 12, color: AppColors.primary)),
-                  ],
-                ),
-              ),
-            ),
-            ...areas.map((a) => Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: _AreaChip(label: a, onRemove: () => onRemove(a)),
-                )),
-          ],
-        ),
-      ),
-    );
-  }
+  ConsumerState<_AreasManagerSheet> createState() =>
+      _AreasManagerSheetState();
 }
 
-class _AreaChip extends StatelessWidget {
-  final String label;
-  final VoidCallback onRemove;
+class _AreasManagerSheetState extends ConsumerState<_AreasManagerSheet> {
+  final _addCtrl = TextEditingController();
+  bool _saving = false;
 
-  const _AreaChip({required this.label, required this.onRemove});
+  @override
+  void dispose() {
+    _addCtrl.dispose();
+    super.dispose();
+  }
+
+  List<String> get _areas => ref.read(projectsProvider).maybeWhen(
+        data: (projects) {
+          try {
+            return projects
+                .firstWhere((p) => p.id == widget.projectId)
+                .areas;
+          } catch (_) {
+            return <String>[];
+          }
+        },
+        orElse: () => <String>[],
+      );
+
+  Future<void> _save(List<String> newAreas) async {
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(projectsProvider.notifier)
+          .updateAreas(widget.projectId, newAreas);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _add() async {
+    final name = _addCtrl.text.trim();
+    if (name.isEmpty || _areas.contains(name)) return;
+    _addCtrl.clear();
+    await _save([..._areas, name]);
+  }
+
+  Future<void> _delete(String name) async {
+    await _save(_areas.where((a) => a != name).toList());
+  }
+
+  Future<void> _rename(String old) async {
+    final ctrl = TextEditingController(text: old);
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        title: Text('Rename Area',
+            style: GoogleFonts.inter(
+                fontWeight: FontWeight.w700,
+                color: AppColors.textOnDark)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          style: GoogleFonts.inter(color: AppColors.textOnDark),
+          cursorColor: AppColors.primary,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide:
+                    const BorderSide(color: Colors.white24)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide:
+                    const BorderSide(color: Colors.white24)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide:
+                    const BorderSide(color: AppColors.primary)),
+          ),
+          onSubmitted: (v) {
+            final n = v.trim();
+            if (n.isNotEmpty) Navigator.pop(ctx, n);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel',
+                style: GoogleFonts.inter(
+                    color: AppColors.textSecondaryOnDark)),
+          ),
+          TextButton(
+            onPressed: () {
+              final n = ctrl.text.trim();
+              if (n.isNotEmpty) Navigator.pop(ctx, n);
+            },
+            child: Text('Save',
+                style: GoogleFonts.inter(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (updated == null || updated == old || !mounted) return;
+    final newList = _areas.map((a) => a == old ? updated : a).toList();
+    await _save(newList);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final areas = ref.watch(projectsProvider).maybeWhen(
+          data: (projects) {
+            try {
+              return projects
+                  .firstWhere((p) => p.id == widget.projectId)
+                  .areas;
+            } catch (_) {
+              return <String>[];
+            }
+          },
+          orElse: () => <String>[],
+        );
+
     return Container(
-      padding: const EdgeInsets.only(left: 12, right: 6, top: 6, bottom: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(20),
-        border:
-            Border.all(color: Colors.white.withValues(alpha: 0.20)),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceDark,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label,
-              style: GoogleFonts.inter(
-                  fontSize: 12, color: AppColors.textOnDark)),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: onRemove,
-            child: const Icon(Icons.close,
-                size: 14, color: AppColors.textSecondaryOnDark),
-          ),
-        ],
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Areas',
+                        style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textOnDark)),
+                  ),
+                  if (_saving)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.primary),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (areas.isNotEmpty) ...[
+              const Divider(color: Colors.white12, height: 1),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 280),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: areas.length,
+                  separatorBuilder: (_, _) =>
+                      const Divider(color: Colors.white12, height: 1),
+                  itemBuilder: (_, i) {
+                    final area = areas[i];
+                    return ListTile(
+                      contentPadding:
+                          const EdgeInsets.fromLTRB(20, 0, 8, 0),
+                      title: Text(area,
+                          style: GoogleFonts.inter(
+                              fontSize: 14,
+                              color: AppColors.textOnDark)),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined,
+                                size: 18,
+                                color: AppColors.textSecondaryOnDark),
+                            onPressed:
+                                _saving ? null : () => _rename(area),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline,
+                                size: 18, color: Colors.redAccent),
+                            onPressed:
+                                _saving ? null : () => _delete(area),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const Divider(color: Colors.white12, height: 1),
+            ],
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                  16, 12, 16,
+                  MediaQuery.of(context).viewInsets.bottom + 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _addCtrl,
+                      style: GoogleFonts.inter(
+                          color: AppColors.textOnDark),
+                      textCapitalization: TextCapitalization.words,
+                      cursorColor: AppColors.primary,
+                      decoration: InputDecoration(
+                        hintText: 'New area name',
+                        hintStyle: GoogleFonts.inter(
+                            color: AppColors.textSecondaryOnDark),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                                color: Colors.white24)),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                                color: Colors.white24)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                                color: AppColors.primary)),
+                      ),
+                      onSubmitted: (_) => _add(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _saving ? null : _add,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20),
+                      ),
+                      child: Text('Add',
+                          style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
