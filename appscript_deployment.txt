@@ -1,17 +1,18 @@
-// After pasting this code into script.google.com:
-// 1. Click Deploy > New Deployment
-// 2. Type: Web App
-// 3. Execute as: Me
-// 4. Who has access: Anyone
-// 5. Click Deploy and copy the Web App URL
-// 6. Paste the URL into lib/services/sheets_service.dart as _baseUrl
+// =============================================================
+// PART 1 — WEB APP
+// Paste this entire file into a standalone Apps Script project.
+// Deploy > New Deployment > Web App
+//   Execute as: Me
+//   Who has access: Anyone
+// Copy the Web App URL into lib/services/sheets_service.dart as _baseUrl
+// =============================================================
 
-const PROJECT_WORKBOOK_ID = '1zZQOmWe02oF7awuRkqgsMsJU1GwgcINyaXBNfUADkS4';
+const PROJECT_WORKBOOK_ID   = '1zZQOmWe02oF7awuRkqgsMsJU1GwgcINyaXBNfUADkS4';
 const REFERENCE_WORKBOOK_ID = '1tdLzOTnnXIVVKrgEgQtS5YVnsZT3Sepo1E4LcKuRR6Y';
-const API_KEY = 'BG_QUOTE_2026';
-const PROJECTS_SHEET_NAME = 'Projects';
+const CATALOGUE_WORKBOOK_ID = '1CnwJR9CvDv2TV47dAPGLx-hwZUcEsnXgYYGHVaRB7ts';
+const API_KEY               = 'BG_QUOTE_2026';
+const PROJECTS_SHEET_NAME   = 'Projects';
 const SYSTEM_TYPES_SHEET_NAME = 'SystemTypes';
-const CATALOGUE_SHEET_NAME = 'Catalogue';
 
 function checkAuth(e) {
   return e.parameter['key'] === API_KEY;
@@ -74,12 +75,33 @@ function doGet(e) {
     } catch (err) { return sendJSON({ success: false, error: err.message }); }
   }
 
+  // Returns all products across every sheet in the Catalogue workbook.
+  // Each row gets Category injected from its sheet name.
   if (action === 'getCatalogue') {
     try {
-      const wb = SpreadsheetApp.openById(REFERENCE_WORKBOOK_ID);
-      const sheet = wb.getSheetByName(CATALOGUE_SHEET_NAME);
-      if (!sheet) return sendJSON({ success: false, error: 'Catalogue sheet not found' });
-      const rows = sheetToJSON(sheet).map(r => ({ ...r, Rate: parseFloat(r['Rate']) || 0 }));
+      const wb = SpreadsheetApp.openById(CATALOGUE_WORKBOOK_ID);
+      const rows = [];
+      for (const sheet of wb.getSheets()) {
+        const category = sheet.getName();
+        sheetToJSON(sheet).forEach(r => {
+          rows.push({ ...r, Category: category, Rate: parseFloat(r['Rate']) || 0 });
+        });
+      }
+      return sendJSON({ success: true, data: rows });
+    } catch (err) { return sendJSON({ success: false, error: err.message }); }
+  }
+
+  // Returns products for a single category (one sheet fetch — faster than getCatalogue).
+  if (action === 'getCatalogueByCategory') {
+    const category = e.parameter.category;
+    if (!category) return sendJSON({ success: false, error: 'category required' });
+    try {
+      const wb = SpreadsheetApp.openById(CATALOGUE_WORKBOOK_ID);
+      const sheet = wb.getSheetByName(category);
+      if (!sheet) return sendJSON({ success: false, error: `Category sheet "${category}" not found` });
+      const rows = sheetToJSON(sheet).map(r => ({
+        ...r, Category: category, Rate: parseFloat(r['Rate']) || 0
+      }));
       return sendJSON({ success: true, data: rows });
     } catch (err) { return sendJSON({ success: false, error: err.message }); }
   }
@@ -164,7 +186,6 @@ function doPost(e) {
         projectsSheet.appendRow(['Ref. Number', 'Project Name', 'Client Name', 'Location', 'Created At', 'Worker', 'Industry', 'Tier', 'Areas']);
       }
       const refNumber = generateRefNumber(projectsSheet);
-      // Build row by header name so column order in the sheet doesn't matter
       const headers = projectsSheet.getRange(1, 1, 1, projectsSheet.getLastColumn()).getValues()[0];
       const newRow = new Array(headers.length).fill('');
       const set = (name, value) => { const i = headers.indexOf(name); if (i >= 0) newRow[i] = value; };
@@ -338,6 +359,12 @@ function doPost(e) {
           }
           if (body.noteText !== undefined && noteCol > 0) sheet.getRange(i + 1, noteCol).setValue(body.noteText);
           if (body.area !== undefined && areaCol > 0) sheet.getRange(i + 1, areaCol).setValue(body.area);
+          if (body.rate !== undefined && rateCol > 0) {
+            const newRate = parseFloat(body.rate) || 0;
+            const qty = qtyCol > 0 ? (parseFloat(data[i][qtyCol - 1]) || 0) : 0;
+            sheet.getRange(i + 1, rateCol).setValue(newRate);
+            if (amountCol > 0) sheet.getRange(i + 1, amountCol).setValue(qty * newRate);
+          }
           return sendJSON({ success: true });
         }
       }
@@ -367,4 +394,264 @@ function doPost(e) {
   }
 
   return sendJSON({ success: false, error: 'Unknown action' });
+}
+
+
+// =============================================================
+// PART 2 — CATALOGUE WORKBOOK TOOLS
+// These functions live in the SAME script project as Part 1.
+//
+// SETUP (run once):
+//   In the Apps Script editor, select function "installCatalogueTriggers"
+//   from the function dropdown and click Run.
+//   Accept the permissions popup.
+//   That's it — triggers are installed automatically.
+//
+// Each sheet tab = one category. Columns: ID | Product Name | Brand | Unit | Rate | Tier
+// =============================================================
+
+// Run this ONCE from the Apps Script editor to wire up all catalogue triggers.
+// Select "installCatalogueTriggers" in the function dropdown and click ▶ Run.
+function installCatalogueTriggers() {
+  const ss = SpreadsheetApp.openById(CATALOGUE_WORKBOOK_ID);
+
+  // Remove any existing catalogue triggers first to avoid duplicates
+  ScriptApp.getProjectTriggers()
+    .filter(t => ['onCatalogueEdit', 'onCatalogueChange', 'onCatalogueOpen']
+      .includes(t.getHandlerFunction()))
+    .forEach(t => ScriptApp.deleteTrigger(t));
+
+  ScriptApp.newTrigger('onCatalogueEdit').forSpreadsheet(ss).onEdit().create();
+  ScriptApp.newTrigger('onCatalogueChange').forSpreadsheet(ss).onChange().create();
+  ScriptApp.newTrigger('onCatalogueOpen').forSpreadsheet(ss).onOpen().create();
+
+  Logger.log('Catalogue triggers installed successfully.');
+}
+
+// Adds QuoteBuilder menu when the Catalogue workbook is opened.
+function onCatalogueOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('QuoteBuilder')
+    .addItem('Fill Missing IDs', 'fillMissingIds')
+    .addItem('Validate Catalogue', 'validateCatalogue')
+    .addToUi();
+}
+
+// Fires on structural changes (new sheet, inserted rows, paste from another file).
+// When a new sheet tab is created, auto-adds the header row.
+function onCatalogueChange(e) {
+  if (e.changeType !== 'INSERT_GRID') return;
+  const sheet = e.source.getActiveSheet();
+  if (!sheet || sheet.getLastRow() > 0) return; // already has content
+  sheet.appendRow(['ID', 'Product Name', 'Brand', 'Unit', 'Rate', 'Tier']);
+  const header = sheet.getRange(1, 1, 1, 6);
+  header.setBackground('#000000');
+  header.setFontColor('#FFFFFF');
+  header.setFontWeight('bold');
+}
+
+// Fires on edit/paste in the Catalogue workbook.
+// ID is generated as soon as a row gets a non-empty Product Name (col 2).
+// Handles single-cell edits and multi-row pastes.
+function onCatalogueEdit(e) {
+  const sheet = e.range.getSheet();
+  const firstDataRow = Math.max(e.range.getRow(), 2); // skip header row
+  const lastRow = e.range.getLastRow();
+  if (firstDataRow > lastRow) return;
+
+  const category = sheet.getName();
+
+  // Read current sheet state once (post-edit values already reflected here)
+  const allData = sheet.getDataRange().getValues();
+
+  // Build prefix state from all existing IDs so new IDs don't clash
+  const categoryPrefixes = {};
+  const prefixMaxNum = {};
+  for (let i = 1; i < allData.length; i++) {
+    if (allData[i][0]) _absorbRow(allData[i][0], category, categoryPrefixes, prefixMaxNum);
+  }
+
+  // Columns: ID(0) | Product Name(1) | Brand(2) | Unit(3) | Rate(4) | Tier(5)
+  for (let row = firstDataRow; row <= lastRow; row++) {
+    const r = allData[row - 1];
+    if (!r) continue;
+    if (r[0]) continue;                                  // already stamped
+    if (!String(r[1] || '').trim()) continue;            // no product name yet
+    const newId = _generateId(category, categoryPrefixes, prefixMaxNum);
+    sheet.getRange(row, 1).setValue(newId);
+    _absorbRow(newId, category, categoryPrefixes, prefixMaxNum);
+  }
+}
+
+// Run from the QuoteBuilder menu to stamp IDs on all rows missing one.
+function fillMissingIds() {
+  const wb = SpreadsheetApp.openById(CATALOGUE_WORKBOOK_ID);
+  const sheets = wb.getSheets();
+  let filled = 0;
+
+  for (const sheet of sheets) {
+    const category = sheet.getName();
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) continue;
+
+    const categoryPrefixes = {};
+    const prefixMaxNum = {};
+
+    // First pass: absorb existing IDs to know what prefixes are taken
+    for (let i = 1; i < data.length; i++) {
+      _absorbRow(data[i][0], category, categoryPrefixes, prefixMaxNum);
+    }
+
+    // Second pass: fill blanks — any row with a Product Name but no ID
+    for (let i = 1; i < data.length; i++) {
+      if (data[i].every(c => c === '' || c === null)) continue;
+      if (data[i][0]) continue;
+      if (!String(data[i][1] || '').trim()) continue;
+      const id = _generateId(category, categoryPrefixes, prefixMaxNum);
+      sheet.getRange(i + 1, 1).setValue(id);
+      filled++;
+    }
+
+    _sortSheet(sheet);
+  }
+
+  SpreadsheetApp.getUi().alert(`Done. Filled ${filled} missing ID${filled !== 1 ? 's' : ''}.`);
+}
+
+// Validates all sheets in the Catalogue workbook and checks SystemTypes tags match.
+function validateCatalogue() {
+  const catWb = SpreadsheetApp.openById(CATALOGUE_WORKBOOK_ID);
+  const sheets = catWb.getSheets();
+  const knownCategories = new Set(sheets.map(s => s.getName()));
+  const issues = [];
+
+  for (const sheet of sheets) {
+    const sheetName = sheet.getName();
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i].every(c => c === '' || c === null)) continue;
+      const [id, productName, brand, unit, rate] = data[i];
+      if (!productName) issues.push(`${sheetName} row ${i + 1}: missing Product Name`);
+      if (!brand)       issues.push(`${sheetName} row ${i + 1}: missing Brand`);
+      if (!unit)        issues.push(`${sheetName} row ${i + 1}: missing Unit`);
+      if (rate === '' || rate === null || rate === undefined)
+                        issues.push(`${sheetName} row ${i + 1}: missing Rate`);
+    }
+  }
+
+  // Check that every SystemTypes tag exists as a sheet in the Catalogue workbook
+  try {
+    const refWb = SpreadsheetApp.openById(REFERENCE_WORKBOOK_ID);
+    const sysSheet = refWb.getSheetByName(SYSTEM_TYPES_SHEET_NAME);
+    if (sysSheet) {
+      const sysData = sysSheet.getDataRange().getValues();
+      for (let i = 1; i < sysData.length; i++) {
+        if (sysData[i].every(c => c === '' || c === null)) continue;
+        const systemType = String(sysData[i][0] || '').trim();
+        const tags = String(sysData[i][1] || '').trim();
+        if (!tags) continue;
+        tags.split(',').forEach(tag => {
+          const t = tag.trim();
+          if (t && !knownCategories.has(t)) {
+            issues.push(`SystemTypes row ${i + 1} (${systemType}): tag "${t}" not found as a sheet in Catalogue workbook`);
+          }
+        });
+      }
+    }
+  } catch (_) {}
+
+  if (issues.length === 0) {
+    SpreadsheetApp.getUi().alert('✓ All good! No issues found.');
+  } else {
+    const preview = issues.slice(0, 20).join('\n');
+    const extra = issues.length > 20 ? `\n\n...and ${issues.length - 20} more.` : '';
+    SpreadsheetApp.getUi().alert(`Found ${issues.length} issue${issues.length !== 1 ? 's' : ''}:\n\n${preview}${extra}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function _sortSheet(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow <= 1) return;
+  // Sort by ID (col A)
+  sheet.getRange(2, 1, lastRow - 1, lastCol).sort([{ column: 1, ascending: true }]);
+}
+
+function _absorbRow(id, category, categoryPrefixes, prefixMaxNum) {
+  id = String(id || '').trim();
+  category = String(category || '').trim();
+  if (!id || !category) return;
+  const match = id.match(/^([A-Z]+)-(\d+)$/);
+  if (!match) return;
+  const prefix = match[1];
+  const num = parseInt(match[2]);
+  if (!categoryPrefixes[category]) categoryPrefixes[category] = prefix;
+  if (!prefixMaxNum[prefix] || num > prefixMaxNum[prefix]) prefixMaxNum[prefix] = num;
+}
+
+// Builds prefix state from all rows in a sheet (used by onCatalogueEdit).
+function _buildCatalogueState(sheet, skipSheetRow) {
+  const data = sheet.getDataRange().getValues();
+  const category = sheet.getName();
+  const categoryPrefixes = {};
+  const prefixMaxNum = {};
+  for (let i = 1; i < data.length; i++) {
+    if (i + 1 === skipSheetRow) continue;
+    _absorbRow(data[i][0], category, categoryPrefixes, prefixMaxNum);
+  }
+  return { categoryPrefixes, prefixMaxNum };
+}
+
+function _generateId(category, categoryPrefixes, prefixMaxNum) {
+  if (categoryPrefixes[category]) {
+    const prefix = categoryPrefixes[category];
+    const next = (prefixMaxNum[prefix] || 0) + 1;
+    prefixMaxNum[prefix] = next;
+    return `${prefix}-${String(next).padStart(3, '0')}`;
+  }
+  const usedPrefixes = new Set(Object.values(categoryPrefixes));
+  const prefix = _derivePrefix(category, usedPrefixes);
+  categoryPrefixes[category] = prefix;
+  prefixMaxNum[prefix] = 1;
+  return `${prefix}-001`;
+}
+
+// Derives a unique 2-3 letter prefix from category initials.
+function _derivePrefix(category, usedPrefixes) {
+  const words = category
+    .replace(/&/g, 'and')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length > 0);
+
+  if (words.length === 0) return 'X';
+
+  const contribs = new Array(words.length).fill(1);
+
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const prefix = words
+      .map((w, i) => w.substring(0, contribs[i]).toUpperCase())
+      .join('');
+
+    if (!usedPrefixes.has(prefix)) return prefix;
+
+    let expanded = false;
+    for (let pass = 0; pass < words.length; pass++) {
+      const idx = (attempt + pass) % words.length;
+      if (contribs[idx] < words[idx].length) {
+        contribs[idx]++;
+        expanded = true;
+        break;
+      }
+    }
+    if (!expanded) break;
+  }
+
+  const base = words.map(w => w[0].toUpperCase()).join('');
+  return base + String(usedPrefixes.size + 1).padStart(2, '0');
 }

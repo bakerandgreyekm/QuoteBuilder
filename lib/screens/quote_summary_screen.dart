@@ -10,6 +10,7 @@ import '../providers/systems_provider.dart';
 import '../providers/line_items_provider.dart';
 import '../utils/quote_generator.dart';
 import '../utils/web_share.dart';
+import '../responsive.dart';
 
 class QuoteSummaryScreen extends ConsumerStatefulWidget {
   final String projectId;
@@ -23,6 +24,96 @@ class QuoteSummaryScreen extends ConsumerStatefulWidget {
 
 class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
   bool _generating = false;
+
+  void _showAddInstallationSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      constraints: kSheetConstraints,
+      builder: (_) => _InstallationChargeSheet(
+        onSave: (rate) => ref.read(lineItemsProvider.notifier).addItem(
+              LineItem(
+                id: '',
+                projectId: widget.projectId,
+                systemType: 'Service',
+                category: 'Installation',
+                productName: 'Installation Charge',
+                brand: 'Baker and Grey',
+                unit: 'job',
+                quantity: 1,
+                rate: rate,
+              ),
+            ),
+      ),
+    );
+  }
+
+  void _showInstallationOptions(BuildContext context, LineItem item) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      constraints: kSheetConstraints,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: Text('Edit rate',
+                style: GoogleFonts.inter(color: AppColors.textOnCard)),
+            onTap: () {
+              Navigator.pop(ctx);
+              _showEditInstallationSheet(item);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete, color: Colors.red),
+            title: Text('Delete',
+                style: GoogleFonts.inter(color: Colors.red)),
+            onTap: () {
+              Navigator.pop(ctx);
+              ref
+                  .read(lineItemsProvider.notifier)
+                  .deleteItem(item.projectId, item.id);
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  void _showEditInstallationSheet(LineItem item) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      constraints: kSheetConstraints,
+      builder: (_) => _InstallationChargeSheet(
+        initialRate: item.rate,
+        onSave: (rate) => ref.read(lineItemsProvider.notifier).updateItem(
+              refNumber: item.projectId,
+              itemId: item.id,
+              quantity: item.quantity,
+              noteText: item.noteText,
+              area: item.area,
+              rate: rate,
+            ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -84,6 +175,7 @@ class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
   void _showFormatPicker() {
     showModalBottomSheet(
       context: context,
+      constraints: kSheetConstraints,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -179,13 +271,30 @@ class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
     final List<Widget> boqRows = [];
     int slNo = 0;
     for (final system in systems) {
-      final sysItems =
-          allItems.where((i) => i.systemType == system.systemType).toList();
+      final sysItems = allItems
+          .where((i) =>
+              i.systemType == system.systemType &&
+              !(i.systemType == 'Service' && i.category == 'Installation'))
+          .toList();
       if (sysItems.isEmpty) continue;
       boqRows.add(_SectionHeader(title: system.systemType));
       for (final item in sysItems) {
         slNo++;
         boqRows.add(_ItemRow(slNo: slNo, item: item));
+      }
+    }
+    final installationItems = allItems
+        .where((i) => i.systemType == 'Service' && i.category == 'Installation')
+        .toList();
+    if (installationItems.isNotEmpty) {
+      boqRows.add(const _SectionHeader(title: 'SERVICE'));
+      for (final item in installationItems) {
+        slNo++;
+        boqRows.add(_ItemRow(
+          slNo: slNo,
+          item: item,
+          onTap: () => _showInstallationOptions(context, item),
+        ));
       }
     }
 
@@ -209,7 +318,11 @@ class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
             ),
           ),
           body: SafeArea(
-            child: Column(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: kMaxContentWidth),
+                child: Column(
               children: [
                 Expanded(child: ListView(
                   padding: const EdgeInsets.all(16),
@@ -339,6 +452,27 @@ class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
                         )
                       else
                         ...boqRows,
+                      const Divider(height: 1, color: AppColors.divider),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        child: TextButton.icon(
+                          onPressed: _showAddInstallationSheet,
+                          icon: const Icon(Icons.add, size: 16),
+                          label: Text(
+                            'Add Installation Charge',
+                            style: GoogleFonts.inter(
+                                fontSize: 13, fontWeight: FontWeight.w500),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -370,6 +504,8 @@ class _QuoteSummaryScreenState extends ConsumerState<QuoteSummaryScreen> {
                 ),
               ],
             ),
+                ),
+              ),
           ),
         ),
         if (_generating)
@@ -484,14 +620,14 @@ class _SectionHeader extends StatelessWidget {
 class _ItemRow extends StatelessWidget {
   final int slNo;
   final LineItem item;
+  final VoidCallback? onTap;
 
-  const _ItemRow({required this.slNo, required this.item});
+  const _ItemRow({required this.slNo, required this.item, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    final row = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: const BoxDecoration(
         border: Border(
             bottom: BorderSide(color: AppColors.divider, width: 0.5)),
@@ -504,8 +640,7 @@ class _ItemRow extends StatelessWidget {
             child: Text(
               '$slNo',
               style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: AppColors.textSecondaryOnCard),
+                  fontSize: 13, color: AppColors.textSecondaryOnCard),
             ),
           ),
           Expanded(
@@ -540,9 +675,17 @@ class _ItemRow extends StatelessWidget {
               ),
             ),
           ),
+          if (onTap != null)
+            const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.more_vert,
+                  size: 16, color: AppColors.textSecondaryOnCard),
+            ),
         ],
       ),
     );
+    if (onTap == null) return row;
+    return GestureDetector(onTap: onTap, child: row);
   }
 }
 
@@ -583,6 +726,152 @@ class _TotalRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _InstallationChargeSheet extends StatefulWidget {
+  final double? initialRate;
+  final Future<void> Function(double rate) onSave;
+
+  const _InstallationChargeSheet({this.initialRate, required this.onSave});
+
+  @override
+  State<_InstallationChargeSheet> createState() =>
+      _InstallationChargeSheetState();
+}
+
+class _InstallationChargeSheetState extends State<_InstallationChargeSheet> {
+  late final TextEditingController _rateCtrl;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _rateCtrl = TextEditingController(
+      text: widget.initialRate != null
+          ? widget.initialRate!.toStringAsFixed(0)
+          : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _rateCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final rate = double.tryParse(_rateCtrl.text.trim());
+    if (rate == null || rate <= 0) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(rate);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e', style: GoogleFonts.inter())),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            widget.initialRate == null
+                ? 'Add Installation Charge'
+                : 'Edit Installation Charge',
+            style: GoogleFonts.inter(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textOnCard,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Baker and Grey  ·  1 job',
+            style: GoogleFonts.inter(
+                fontSize: 12, color: AppColors.textSecondaryOnCard),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _rateCtrl,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            autofocus: true,
+            style: GoogleFonts.inter(
+                fontSize: 16, color: AppColors.textOnCard),
+            decoration: InputDecoration(
+              labelText: 'Rate (₹)',
+              labelStyle: GoogleFonts.inter(
+                  color: AppColors.textSecondaryOnCard),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide:
+                    const BorderSide(color: AppColors.primary, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: _saving ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                disabledBackgroundColor: Colors.grey[300],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2),
+                    )
+                  : Text(
+                      'Save',
+                      style: GoogleFonts.inter(
+                          fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

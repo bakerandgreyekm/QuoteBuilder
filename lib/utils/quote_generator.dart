@@ -248,10 +248,8 @@ pw.Widget _pdfItemsTable(List<String> systems, List<LineItem> items) {
   ));
 
   int sl = 0;
-  for (final sys in systems) {
-    final sysItems = items.where((i) => i.systemType == sys).toList();
-    if (sysItems.isEmpty) continue;
 
+  void addSectionHeader(String label) {
     rows.add(pw.TableRow(
       decoration: pw.BoxDecoration(color: _pdfGray100),
       children: [
@@ -261,7 +259,7 @@ pw.Widget _pdfItemsTable(List<String> systems, List<LineItem> items) {
           child: pw.Row(children: [
             pw.Container(width: 3, height: 10, color: _pdfRed),
             pw.SizedBox(width: 6),
-            pw.Text(sys.toUpperCase(),
+            pw.Text(label.toUpperCase(),
                 style: pw.TextStyle(
                     fontSize: 8,
                     fontWeight: pw.FontWeight.bold,
@@ -274,35 +272,58 @@ pw.Widget _pdfItemsTable(List<String> systems, List<LineItem> items) {
         pw.SizedBox(),
       ],
     ));
+  }
 
-    for (final item in sysItems) {
-      sl++;
-      rows.add(pw.TableRow(
-        decoration: pw.BoxDecoration(
-          border: pw.Border(
-              bottom: pw.BorderSide(color: _pdfGray200, width: 0.5)),
-        ),
-        children: [
-          _pdfTD('$sl'),
-          pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(item.productName,
-                    style: const pw.TextStyle(fontSize: 10)),
-                if (item.brand.isNotEmpty)
-                  pw.Text(item.brand,
-                      style: pw.TextStyle(fontSize: 9, color: _pdfGray500)),
-              ],
-            ),
+  void addItemRow(LineItem item) {
+    sl++;
+    rows.add(pw.TableRow(
+      decoration: pw.BoxDecoration(
+        border:
+            pw.Border(bottom: pw.BorderSide(color: _pdfGray200, width: 0.5)),
+      ),
+      children: [
+        _pdfTD('$sl'),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(item.productName,
+                  style: const pw.TextStyle(fontSize: 10)),
+              if (item.brand.isNotEmpty)
+                pw.Text(item.brand,
+                    style: pw.TextStyle(fontSize: 9, color: _pdfGray500)),
+            ],
           ),
-          _pdfTD('${item.quantity}', right: true),
-          _pdfTD(item.unit),
-          _pdfTD(formatINR(item.rate), right: true),
-          _pdfTD(formatINR(item.amount), right: true, bold: true),
-        ],
-      ));
+        ),
+        _pdfTD('${item.quantity}', right: true),
+        _pdfTD(item.unit),
+        _pdfTD(formatINR(item.rate), right: true),
+        _pdfTD(formatINR(item.amount), right: true, bold: true),
+      ],
+    ));
+  }
+
+  for (final sys in systems) {
+    final sysItems = items
+        .where((i) =>
+            i.systemType == sys &&
+            !(i.systemType == 'Service' && i.category == 'Installation'))
+        .toList();
+    if (sysItems.isEmpty) continue;
+    addSectionHeader(sys);
+    for (final item in sysItems) {
+      addItemRow(item);
+    }
+  }
+
+  final installationItems = items
+      .where((i) => i.systemType == 'Service' && i.category == 'Installation')
+      .toList();
+  if (installationItems.isNotEmpty) {
+    addSectionHeader('Service');
+    for (final item in installationItems) {
+      addItemRow(item);
     }
   }
 
@@ -422,10 +443,25 @@ class QuoteDocumentWidget extends StatelessWidget {
     int sl = 0;
     final tableRows = <Widget>[_tableHeader()];
     for (final sys in systems) {
-      final sysItems = items.where((i) => i.systemType == sys).toList();
+      final sysItems = items
+          .where((i) =>
+              i.systemType == sys &&
+              !(i.systemType == 'Service' && i.category == 'Installation'))
+          .toList();
       if (sysItems.isEmpty) continue;
       tableRows.add(_sysRow(sys));
       for (final item in sysItems) {
+        sl++;
+        tableRows.add(_itemRow(sl, item));
+      }
+    }
+    final installationItems = items
+        .where(
+            (i) => i.systemType == 'Service' && i.category == 'Installation')
+        .toList();
+    if (installationItems.isNotEmpty) {
+      tableRows.add(_sysRow('Service'));
+      for (final item in installationItems) {
         sl++;
         tableRows.add(_itemRow(sl, item));
       }

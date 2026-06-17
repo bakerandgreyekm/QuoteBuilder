@@ -53,6 +53,7 @@ class LineItemsNotifier extends AsyncNotifier<List<LineItem>> {
     required int quantity,
     required String noteText,
     String? area,
+    double? rate,
   }) async {
     await ref.read(sheetsServiceProvider).updateLineItem(
           refNumber: refNumber,
@@ -60,6 +61,7 @@ class LineItemsNotifier extends AsyncNotifier<List<LineItem>> {
           quantity: quantity,
           noteText: noteText,
           area: area,
+          rate: rate,
         );
     final existing = state.value ?? [];
     state = AsyncData(existing.map((i) {
@@ -73,7 +75,7 @@ class LineItemsNotifier extends AsyncNotifier<List<LineItem>> {
         brand: i.brand,
         unit: i.unit,
         quantity: quantity,
-        rate: i.rate,
+        rate: rate ?? i.rate,
         noteText: noteText,
         area: area,
       );

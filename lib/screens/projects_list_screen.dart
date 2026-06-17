@@ -11,6 +11,8 @@ import '../providers/worker_provider.dart';
 import '../providers/employees_provider.dart';
 import '../providers/catalogue_provider.dart';
 import '../widgets/loading_widgets.dart';
+import '../responsive.dart';
+import '../utils/web_share.dart';
 
 class ProjectsListScreen extends ConsumerStatefulWidget {
   const ProjectsListScreen({super.key});
@@ -57,6 +59,7 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
       enableDrag: dismissible,
       isScrollControlled: true,
       backgroundColor: Colors.white,
+      constraints: kSheetConstraints,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -69,6 +72,7 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
+      constraints: kSheetConstraints,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -107,25 +111,36 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.surfaceDark,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: Center(
-            child: Text(
-              'B&G',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
+        leading: PopupMenuButton<String>(
+          icon: const Icon(Icons.menu, color: AppColors.textOnDark),
+          tooltip: 'Open Sheets',
+          onSelected: openUrl,
+          itemBuilder: (_) => [
+            PopupMenuItem<String>(
+              value:
+                  'https://docs.google.com/spreadsheets/d/1zZQOmWe02oF7awuRkqgsMsJU1GwgcINyaXBNfUADkS4/edit',
+              child: _SheetLink(label: 'Project Workbook'),
             ),
-          ),
+            const PopupMenuDivider(),
+            PopupMenuItem<String>(
+              value:
+                  'https://docs.google.com/spreadsheets/d/1tdLzOTnnXIVVKrgEgQtS5YVnsZT3Sepo1E4LcKuRR6Y/edit',
+              child: _SheetLink(label: 'Reference Workbook'),
+            ),
+            const PopupMenuDivider(),
+            PopupMenuItem<String>(
+              value:
+                  'https://docs.google.com/spreadsheets/d/1CnwJR9CvDv2TV47dAPGLx-hwZUcEsnXgYYGHVaRB7ts/edit',
+              child: _SheetLink(label: 'Catalogue Workbook'),
+            ),
+          ],
         ),
         title: Text(
-          'QuoteBuilder',
+          'B&G',
           style: GoogleFonts.inter(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textOnDark,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textSecondaryOnDark,
           ),
         ),
         centerTitle: true,
@@ -152,7 +167,11 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
       ),
       body: Stack(
         children: [
-          Column(
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kMaxContentWidth),
+              child: Column(
             children: [
               Container(
                 color: AppColors.surfaceDark,
@@ -216,37 +235,71 @@ class _ProjectsListScreenState extends ConsumerState<ProjectsListScreen> {
                                     .toLowerCase()
                                     .contains(_query.toLowerCase()))
                             .toList();
+                    Widget buildCard(int i, {bool gridMode = false}) {
+                      final p = projects[i];
+                      final systemCount =
+                          ref.watch(systemsProvider).maybeWhen(
+                                data: (systems) => systems
+                                    .where((s) => s.projectId == p.id)
+                                    .length,
+                                orElse: () => 0,
+                              );
+                      final total =
+                          ref.watch(lineItemsProvider).maybeWhen(
+                                data: (items) => items
+                                    .where((item) => item.projectId == p.id)
+                                    .fold(0.0, (s, item) => s + item.amount),
+                                orElse: () => 0.0,
+                              );
+                      return _ProjectCard(
+                        project: p,
+                        systemCount: _statsLoaded ? systemCount : null,
+                        total: _statsLoaded ? total : null,
+                        onTap: () => context.push('/project/${p.id}'),
+                        margin: gridMode
+                            ? EdgeInsets.zero
+                            : const EdgeInsets.only(bottom: 12),
+                      );
+                    }
+
+                    if (isDesktop(context)) {
+                      final rowCount = (projects.length / 2).ceil();
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: rowCount,
+                        itemBuilder: (_, row) {
+                          final left = row * 2;
+                          final right = left + 1;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                    child: buildCard(left, gridMode: true)),
+                                const SizedBox(width: 12),
+                                if (right < projects.length)
+                                  Expanded(
+                                      child: buildCard(right, gridMode: true))
+                                else
+                                  const Expanded(child: SizedBox()),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    }
                     return ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: projects.length,
-                      itemBuilder: (context, i) {
-                        final p = projects[i];
-                        final systemCount =
-                            ref.watch(systemsProvider).maybeWhen(
-                                  data: (systems) => systems
-                                      .where((s) => s.projectId == p.id)
-                                      .length,
-                                  orElse: () => 0,
-                                );
-                        final total =
-                            ref.watch(lineItemsProvider).maybeWhen(
-                                  data: (items) => items
-                                      .where((item) => item.projectId == p.id)
-                                      .fold(0.0, (s, item) => s + item.amount),
-                                  orElse: () => 0.0,
-                                );
-                        return _ProjectCard(
-                          project: p,
-                          systemCount: _statsLoaded ? systemCount : null,
-                          total: _statsLoaded ? total : null,
-                          onTap: () => context.push('/project/${p.id}'),
-                        );
-                      },
+                      itemBuilder: (_, i) => buildCard(i),
                     );
                   },
                 ),
               ),
             ],
+          ),
+            ),
           ),
           if (_creatingProject)
             Container(
@@ -282,12 +335,14 @@ class _ProjectCard extends StatelessWidget {
   final int? systemCount;
   final double? total;
   final VoidCallback onTap;
+  final EdgeInsetsGeometry margin;
 
   const _ProjectCard({
     required this.project,
     required this.systemCount,
     required this.total,
     required this.onTap,
+    this.margin = const EdgeInsets.only(bottom: 12),
   });
 
   @override
@@ -295,7 +350,7 @@ class _ProjectCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
+        margin: margin,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -752,6 +807,28 @@ class _IndustryTierFields extends StatelessWidget {
             }),
           ],
         ),
+      ],
+    );
+  }
+}
+
+class _SheetLink extends StatelessWidget {
+  final String label;
+
+  const _SheetLink({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.open_in_new,
+            size: 16, color: AppColors.textSecondaryOnDark),
+        const SizedBox(width: 12),
+        Text(label,
+            style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textOnDark)),
       ],
     );
   }

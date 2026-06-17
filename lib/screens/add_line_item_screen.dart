@@ -11,6 +11,7 @@ import '../widgets/voice_note_button.dart';
 import '../providers/catalogue_provider.dart';
 import '../providers/line_items_provider.dart';
 import '../providers/projects_provider.dart';
+import '../responsive.dart';
 
 class AddLineItemScreen extends ConsumerStatefulWidget {
   final String projectId;
@@ -85,9 +86,10 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final catalogueAsync = ref.watch(catalogueProvider);
-    final catalogueLoading = catalogueAsync.isLoading;
     final categories = ref.watch(categoriesForSystemProvider(widget.systemType));
+    final isCategoryLoading = _category != null
+        ? ref.watch(catalogueByCategoryProvider(_category!)).isLoading
+        : false;
     final project = ref.watch(projectsProvider).maybeWhen(
           data: (projects) {
             try {
@@ -123,7 +125,11 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
         ),
       ),
       body: SafeArea(
-        child: Column(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kMaxContentWidth),
+            child: Column(
           children: [
             Expanded(
               child: ListView(
@@ -131,7 +137,30 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
                 children: [
                   SectionHeader(title: 'CATEGORY'),
                   _FormCard(
-                    child: catalogueLoading
+                    child: DropdownButton<String>(
+                      value: _category,
+                      isExpanded: true,
+                      dropdownColor: Colors.white,
+                      underline: const SizedBox.shrink(),
+                      style: GoogleFonts.inter(color: AppColors.textOnCard),
+                      hint: Text(
+                        'Select category',
+                        style: GoogleFonts.inter(
+                            color: AppColors.textSecondaryOnCard),
+                      ),
+                      items: categories
+                          .map((c) =>
+                              DropdownMenuItem(value: c, child: Text(c)))
+                          .toList(),
+                      onChanged: (v) => setState(() {
+                        _category = v;
+                        _product = null;
+                      }),
+                    ),
+                  ),
+                  SectionHeader(title: 'PRODUCT'),
+                  _FormCard(
+                    child: isCategoryLoading
                         ? SizedBox(
                             height: 48,
                             child: Row(children: [
@@ -142,36 +171,12 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
                                       strokeWidth: 2,
                                       color: AppColors.primary)),
                               const SizedBox(width: 12),
-                              Text('Loading catalogue...',
+                              Text('Loading products...',
                                   style: GoogleFonts.inter(
                                       color: AppColors.textSecondaryOnCard)),
                             ]),
                           )
-                        : DropdownButton<String>(
-                            value: _category,
-                            isExpanded: true,
-                            dropdownColor: Colors.white,
-                            underline: const SizedBox.shrink(),
-                            style: GoogleFonts.inter(
-                                color: AppColors.textOnCard),
-                            hint: Text(
-                              'Select category',
-                              style: GoogleFonts.inter(
-                                  color: AppColors.textSecondaryOnCard),
-                            ),
-                            items: categories
-                                .map((c) => DropdownMenuItem(
-                                    value: c, child: Text(c)))
-                                .toList(),
-                            onChanged: (v) => setState(() {
-                              _category = v;
-                              _product = null;
-                            }),
-                          ),
-                  ),
-                  SectionHeader(title: 'PRODUCT'),
-                  _FormCard(
-                    child: DropdownButton<Product>(
+                        : DropdownButton<Product>(
                       value: _product,
                       isExpanded: true,
                       dropdownColor: Colors.white,
@@ -452,6 +457,8 @@ class _AddLineItemScreenState extends ConsumerState<AddLineItemScreen> {
               ),
             ),
           ],
+        ),
+          ),
         ),
       ),
     );

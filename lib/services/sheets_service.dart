@@ -103,6 +103,9 @@ class SheetsService {
 
   Future<List<Map<String, dynamic>>> getCatalogue() => _get('getCatalogue');
 
+  Future<List<Map<String, dynamic>>> getCatalogueByCategory(String category) =>
+      _get('getCatalogueByCategory', {'category': category});
+
   Future<List<Map<String, dynamic>>> getLineItems(String refNumber) =>
       _get('getLineItems', {'refNumber': refNumber});
 
@@ -184,15 +187,18 @@ class SheetsService {
     required int quantity,
     required String noteText,
     String? area,
+    double? rate,
   }) async {
-    await _post({
+    final payload = <String, dynamic>{
       'action': 'updateLineItem',
       'refNumber': refNumber,
       'itemId': itemId,
       'quantity': quantity,
       'noteText': noteText,
       'area': area ?? '',
-    });
+    };
+    if (rate != null) payload['rate'] = rate;
+    await _post(payload);
   }
 
   Future<void> deleteLineItem({

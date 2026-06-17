@@ -47,9 +47,18 @@ class CatalogueNotifier extends AsyncNotifier<List<Product>> {
   }
 }
 
+// Full catalogue (used only as fallback when system type tags aren't configured)
 final catalogueProvider =
     AsyncNotifierProvider<CatalogueNotifier, List<Product>>(
         CatalogueNotifier.new);
+
+// Per-category lazy fetch — only loads when a category is actually selected
+final catalogueByCategoryProvider =
+    FutureProvider.family<List<Product>, String>((ref, category) async {
+  final raw =
+      await ref.read(sheetsServiceProvider).getCatalogueByCategory(category);
+  return raw.map((m) => Product.fromMap(m)).toList();
+});
 
 final categoriesProvider = Provider<List<String>>((ref) {
   return ref.watch(catalogueProvider).maybeWhen(
@@ -60,8 +69,8 @@ final categoriesProvider = Provider<List<String>>((ref) {
 
 final productsByCategoryProvider =
     Provider.family<List<Product>, String>((ref, category) {
-  return ref.watch(catalogueProvider).maybeWhen(
-    data: (list) => list.where((p) => p.category == category).toList(),
+  return ref.watch(catalogueByCategoryProvider(category)).maybeWhen(
+    data: (list) => list,
     orElse: () => [],
   );
 });
@@ -72,9 +81,8 @@ final tieredProductsByCategoryProvider = Provider.family<
     ({List<Product> recommended, List<Product> others}),
     (String, String?)>((ref, args) {
   final (category, projectTier) = args;
-  return ref.watch(catalogueProvider).maybeWhen(
-    data: (list) {
-      final products = list.where((p) => p.category == category).toList();
+  return ref.watch(catalogueByCategoryProvider(category)).maybeWhen(
+    data: (products) {
       if (projectTier == null) {
         return (recommended: products, others: const []);
       }

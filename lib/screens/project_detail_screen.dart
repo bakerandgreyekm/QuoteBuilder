@@ -13,6 +13,8 @@ import '../providers/systems_provider.dart';
 import '../providers/line_items_provider.dart';
 import '../providers/catalogue_provider.dart';
 import 'add_system_sheet.dart';
+import '../responsive.dart';
+import '../widgets/edit_line_item_sheet.dart';
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
   final String projectId;
@@ -82,6 +84,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
+      constraints: kSheetConstraints,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -106,6 +109,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      constraints: kSheetConstraints,
       builder: (_) => _AreasManagerSheet(projectId: widget.projectId),
     );
   }
@@ -115,7 +119,73 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      constraints: kSheetConstraints,
       builder: (_) => AddSystemSheet(projectId: widget.projectId),
+    );
+  }
+
+  void _showAreaItemOptions(BuildContext context, LineItem item) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      constraints: kSheetConstraints,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: Text('Edit', style: GoogleFonts.inter(color: AppColors.textOnCard)),
+            onTap: () {
+              Navigator.pop(ctx);
+              _showAreaItemEdit(context, item);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete, color: Colors.red),
+            title: Text('Delete', style: GoogleFonts.inter(color: Colors.red)),
+            onTap: () {
+              Navigator.pop(ctx);
+              ref.read(lineItemsProvider.notifier).deleteItem(item.projectId, item.id);
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  void _showAreaItemEdit(BuildContext context, LineItem item) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      constraints: kSheetConstraints,
+      builder: (_) => EditLineItemSheet(
+        item: item,
+        onSave: (qty, note, area) => ref
+            .read(lineItemsProvider.notifier)
+            .updateItem(
+              refNumber: item.projectId,
+              itemId: item.id,
+              quantity: qty,
+              noteText: note,
+              area: area,
+            ),
+      ),
     );
   }
 
@@ -229,7 +299,11 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           bottomNavigationBar: RunningTotalBar(totalExGST: total),
           body: Stack(
             children: [
-              ListView(
+              Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: kMaxContentWidth),
+                  child: ListView(
             padding: const EdgeInsets.only(bottom: 80),
             children: [
               Container(
@@ -289,58 +363,21 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
                       children: [
-                        Expanded(
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            children: [
-                              if (project.industry != null)
-                                _InfoBadge(
-                                  icon: Icons.business_center_outlined,
-                                  label: project.industry!,
-                                ),
-                              if (project.tier != null)
-                                _InfoBadge(
-                                  icon: Icons.star_outline,
-                                  label: project.tier!,
-                                  highlight: project.tier == 'Premium',
-                                ),
-                            ],
+                        if (project.industry != null)
+                          _InfoBadge(
+                            icon: Icons.business_center_outlined,
+                            label: project.industry!,
                           ),
-                        ),
-                        GestureDetector(
-                          onTap: () => _showAreasManager(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.tune,
-                                    size: 13,
-                                    color: AppColors.textOnCard),
-                                const SizedBox(width: 6),
-                                Text(
-                                  project.areas.isEmpty
-                                      ? 'Manage Areas'
-                                      : 'Areas (${project.areas.length})',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textOnCard,
-                                  ),
-                                ),
-                              ],
-                            ),
+                        if (project.tier != null)
+                          _InfoBadge(
+                            icon: Icons.star_outline,
+                            label: project.tier!,
+                            highlight: project.tier == 'Premium',
                           ),
-                        ),
                       ],
                     ),
                   ],
@@ -409,10 +446,45 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       ),
                     ),
               ] else ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                    onTap: () => _showAreasManager(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.tune,
+                              size: 13, color: AppColors.textOnCard),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Manage Areas',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textOnCard,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  ),
+                ),
                 ..._buildAreaWidgets(project),
               ],
             ],
           ),
+                ),
+              ),
               if (_deleting)
                 Container(
                   color: Colors.black.withValues(alpha: 0.6),
@@ -483,7 +555,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         ));
       } else {
         for (final item in items) {
-          widgets.add(_AreaItemRow(item: item));
+          widgets.add(_AreaItemRow(
+            item: item,
+            onTap: () => _showAreaItemOptions(context, item),
+          ));
         }
       }
     }
@@ -495,7 +570,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     if (generalItems.isNotEmpty) {
       widgets.add(const _AreaSectionLabel('GENERAL'));
       for (final item in generalItems) {
-        widgets.add(_AreaItemRow(item: item));
+        widgets.add(_AreaItemRow(
+          item: item,
+          onTap: () => _showAreaItemOptions(context, item),
+        ));
       }
     }
 
@@ -1181,12 +1259,15 @@ class _AreaSectionLabel extends StatelessWidget {
 
 class _AreaItemRow extends StatelessWidget {
   final LineItem item;
+  final VoidCallback onTap;
 
-  const _AreaItemRow({required this.item});
+  const _AreaItemRow({required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -1255,6 +1336,7 @@ class _AreaItemRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
